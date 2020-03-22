@@ -10,7 +10,7 @@ Confinement.root = __dir__
 Confinement.site = Confinement::Builder.new(
   root: Confinement.root,
   assets: "assets",
-  content: "content",
+  contents: "contents",
   layouts: "layouts",
   config: {
     index: "index.html"
