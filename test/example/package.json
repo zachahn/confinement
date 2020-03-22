@@ -1,0 +1,13 @@
+{
+  "name": "example",
+  "version": "1.0.0",
+  "description": "confinement example",
+  "license": "MIT",
+  "private": true,
+  "devDependencies": {
+    "parcel": "^2.0.0-alpha.3.2"
+  },
+  "dependencies": {
+    "tailwindcss": "^1.2.0"
+  }
+}
