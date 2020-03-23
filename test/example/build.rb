@@ -12,7 +12,7 @@ using Confinement::Easier
 Confinement.site.contents do |contents, dest|
   dest["/"] = Confinement::Page.new(
     layout: "default",
-    source: contents.join("index.html.erb")
+    input_path: contents.join("index.html.erb")
   )
 
   blog_posts = contents.glob("posts/*.md*").filter_map do |blog_post|
@@ -22,13 +22,13 @@ Confinement.site.contents do |contents, dest|
 
     dest["/posts/#{unixtime}/"] = Confinement::Page.new(
       layout: "blog_post",
-      source: blog_post
+      input_path: blog_post
     )
   end
 
   dest["/posts/"] = Confinement::Page.new(
     layout: "default",
-    source: contents.join("posts.html.erb"),
+    input_path: contents.join("posts.html.erb"),
     locals: {
       blog_posts: blog_posts
     }
@@ -36,22 +36,22 @@ Confinement.site.contents do |contents, dest|
 
   dest["/resume/"] = Confinement::Page.new(
     layout: "default",
-    source: contents.join("resume.html.erb"),
+    input_path: contents.join("resume.html.erb"),
   )
 
   dest["/resume.pdf"] = Confinement::Page.new(
     layout: "default",
-    source: contents.join("resume.tex.erb"),
+    input_path: contents.join("resume.tex.erb"),
   )
 
   dest["/about/"] = Confinement::Page.new(
     layout: "default",
-    source: contents.join("about.html.erb"),
+    input_path: contents.join("about.html.erb"),
   )
 
   dest["/about/rated/"] = Confinement::Page.new(
     layout: "default",
-    source: contents.join("about-rated.html.erb"),
+    input_path: contents.join("about-rated.html.erb"),
   )
 end
 
@@ -62,12 +62,12 @@ end
 #
 Confinement.site.assets do |assets, dest|
   dest["/assets/application.js"] = Confinement::Asset.new(
-    source: assets.join("application.js"),
+    input_path: assets.join("application.js"),
     entrypoint: true,
   )
 
   dest["/assets/application.css"] = Confinement::Asset.new(
-    source: assets.join("application.css"),
+    input_path: assets.join("application.css"),
     entrypoint: false,
   )
 end
