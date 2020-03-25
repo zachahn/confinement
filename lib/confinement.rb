@@ -6,11 +6,15 @@ elsif Gem.loaded_specs.has_key?("pry-byebug")
   require "pry"
 end
 
+# standard library
 require "open3"
 require "pathname"
+require "yaml"
 
+# gems
 require "erubi"
 
+# internal
 require_relative "confinement/version"
 
 module Confinement
@@ -18,7 +22,16 @@ module Confinement
     class PathDoesNotExist < Error; end
   end
 
+  FRONTMATTER_REGEX =
+    /\A
+      (?<frontmatter_section>
+      (?<frontmatter>^---\n
+      .*?)
+      ^---\n)?
+      (?<body>.*)\z/mx
+
   module Easier
+    # NOTE: Avoid state - Pathname is supposed to be immutable
     refine Pathname do
       # Pathname#join and File.join behave very differently
       #
@@ -32,6 +45,18 @@ module Confinement
         difference = other.relative_path_from(self)
 
         difference.to_s !~ /\A..\b/
+      end
+    end
+
+    refine String do
+      def frontmatter_and_body(strip: true)
+        matches = FRONTMATTER_REGEX.match(self)
+        frontmatter = matches["frontmatter"] || ""
+        frontmatter = YAML.safe_load(frontmatter)
+        body = matches["body"] || ""
+        body = body.strip if strip
+
+        [frontmatter, body]
       end
     end
   end
@@ -65,8 +90,8 @@ module Confinement
         index: config.fetch(:index, "index.html")
       }
 
-      @output_root = root.join(root.join(config.fetch(:destination_root, "public")))
-      @assets_root = @output_root.join(config.fetch(:assets_subdirectory, "assets"))
+      @output_root = root.concat(config.fetch(:destination_root, "public"))
+      @assets_root = @output_root.concat(config.fetch(:assets_subdirectory, "assets"))
 
       @representation = Representation.new
     end
@@ -78,15 +103,15 @@ module Confinement
     attr_reader :config
 
     def contents_path
-      @root.join(@contents)
+      @contents_path ||= @root.concat(@contents)
     end
 
     def layouts_path
-      @root.join(@contents)
+      @layouts_path ||= @root.concat(@contents)
     end
 
     def assets_path
-      @root.join(@assets)
+      @assets_path ||= @root.concat(@assets)
     end
 
     def contents
@@ -163,7 +188,7 @@ module Confinement
     end
   end
 
-  class Page
+  class View
     # @param layout [String] the ActionPack layout
     # @param input_path [Pathname] path to source
     # @param frontmatter [Hash] Optional, overrides from "input_path"
@@ -233,7 +258,7 @@ module Confinement
   end
 
   class Rendering
-    # TODO: Merge ViewContext and Page
+    # TODO: Merge ViewContext and View
     class ViewContext
       def initialize(routes:, locals:, contents_path:, layouts_path:)
         self.parent_context = nil
@@ -247,6 +272,7 @@ module Confinement
       attr_accessor :routes
       attr_accessor :parent_context
       attr_accessor :locals
+      attr_accessor :frontmatter
       attr_reader :contents_path
       attr_reader :layouts_path
 
@@ -257,22 +283,34 @@ module Confinement
         the_dup
       end
 
-      def render(page, renderers:, &block)
-        RenderChain.new(page: page, renderers: renderers, view_context: self).call(&block)
+      def render(path = nil, inline: nil, renderers:, &block)
+        body =
+          if path
+            path.read
+          elsif inline
+            inline
+          else
+            raise %(Must pass in either a Pathname or `inline: 'text'`)
+          end
+
+        RenderChain.new(body: body, renderers: renderers, view_context: self).call(&block)
       end
     end
 
     class RenderChain
-      def initialize(page:, renderers:, view_context:)
-        @page = page
+      def initialize(body:, renderers:, view_context:)
+        @body = body
         @renderers = renderers
         @view_context = view_context
       end
 
       def call(&block)
-        view_context = @view_context.dup_for_chain
+        frontmatter, body = @body.frontmatter_and_body
 
-        @renderers.reduce(@page) do |memo, renderer|
+        view_context = @view_context.dup_for_chain
+        view_context.frontmatter = frontmatter
+
+        @renderers.reduce(body) do |memo, renderer|
           renderer.call(memo, view_context, &block)
         end
       end
@@ -395,8 +433,8 @@ module Confinement
         parsed_parcel_output = processed_file_paths.map do |file|
           output_file, input_file = file.strip.split("\n└── ")
 
-          output_path = site.root.join(output_file[PARCEL_FILE_OUTPUT_REGEX, 1])
-          input_path = site.root.join(input_file[PARCEL_FILE_OUTPUT_REGEX, 1])
+          output_path = site.root.concat(output_file[PARCEL_FILE_OUTPUT_REGEX, 1])
+          input_path = site.root.concat(input_file[PARCEL_FILE_OUTPUT_REGEX, 1])
 
           if !representation_by_input_path.key?(input_path)
             next
@@ -422,7 +460,7 @@ module Confinement
       )
 
       content_body = content.input_path.read
-      content.rendered_body = view_context.render(content_body, renderers: content.renderers) || ""
+      content.rendered_body = view_context.render(inline: content_body, renderers: content.renderers) || ""
 
       content.output_path =
         if content.url_path[-1] == "/"

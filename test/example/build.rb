@@ -10,7 +10,7 @@ using Confinement::Easier
 # |_|   \__,_|\__, |\___||___/
 #             |___/
 Confinement.site.contents do |contents, dest|
-  dest["/"] = Confinement::Page.new(
+  dest["/"] = Confinement::View.new(
     layout: "default",
     input_path: contents.join("index.html.erb"),
     renderers: [Confinement::Renderer::Erb.new]
@@ -21,14 +21,14 @@ Confinement.site.contents do |contents, dest|
 
     next if unixtime.nil?
 
-    dest["/posts/#{unixtime}/"] = Confinement::Page.new(
+    dest["/posts/#{unixtime}/"] = Confinement::View.new(
       layout: "blog_post",
       input_path: blog_post,
       renderers: [Confinement::Renderer::Erb.new]
     )
   end
 
-  dest["/posts/"] = Confinement::Page.new(
+  dest["/posts/"] = Confinement::View.new(
     layout: "default",
     input_path: contents.join("posts.html.erb"),
     locals: {
@@ -37,19 +37,19 @@ Confinement.site.contents do |contents, dest|
     renderers: [Confinement::Renderer::Erb.new]
   )
 
-  dest["/resume/"] = Confinement::Page.new(
+  dest["/resume/"] = Confinement::View.new(
     layout: "default",
     input_path: contents.join("resume.html.erb"),
     renderers: [Confinement::Renderer::Erb.new]
   )
 
-  dest["/resume.pdf"] = Confinement::Page.new(
+  dest["/resume.pdf"] = Confinement::View.new(
     layout: "default",
     input_path: contents.join("resume.tex.erb"),
     renderers: [Confinement::Renderer::Erb.new]
   )
 
-  dest["/about/"] = Confinement::Page.new(
+  dest["/about/"] = Confinement::View.new(
     layout: "default",
     input_path: contents.join("about.html.erb"),
     renderers: [Confinement::Renderer::Erb.new]
