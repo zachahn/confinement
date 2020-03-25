@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 if Gem.loaded_specs.has_key?("pry-byebug")
   require "pry-byebug"
 elsif Gem.loaded_specs.has_key?("pry-byebug")
@@ -7,12 +9,34 @@ end
 require "open3"
 require "pathname"
 
-require "confinement/version"
+require "erubi"
+
+require_relative "confinement/version"
 
 module Confinement
   class Error < StandardError
     class PathDoesNotExist < Error; end
   end
+
+  module Easier
+    refine Pathname do
+      # Pathname#join and File.join behave very differently
+      #
+      # - Pathname.new("foo").join("/bar") # => Pathname.new("/bar")
+      # - File.join("foo", "/bar") # => "foo/bar"
+      def concat(*parts)
+        Pathname.new(File.join(self, *parts))
+      end
+
+      def include?(other)
+        difference = other.relative_path_from(self)
+
+        difference.to_s !~ /\A..\b/
+      end
+    end
+  end
+
+  using Easier
 
   class << self
     attr_reader :root
@@ -53,6 +77,18 @@ module Confinement
     attr_reader :representation
     attr_reader :config
 
+    def contents_path
+      @root.join(@contents)
+    end
+
+    def layouts_path
+      @root.join(@contents)
+    end
+
+    def assets_path
+      @root.join(@assets)
+    end
+
     def contents
       if !contents_path.exist?
         raise PathDoesNotExist, "Contents path doesn't exist: #{contents_path}"
@@ -68,16 +104,6 @@ module Confinement
 
       yield(assets_path, @representation.assets)
     end
-
-    private
-
-    def contents_path
-      @root.join(@contents)
-    end
-
-    def assets_path
-      @root.join(@assets)
-    end
   end
 
   class Representation
@@ -85,6 +111,14 @@ module Confinement
 
     def initialize
       @lookup = {}
+    end
+
+    def fetch(key)
+      if !@lookup.key?(key)
+        raise "Not represented!"
+      end
+
+      @lookup[key]
     end
 
     def each
@@ -134,19 +168,23 @@ module Confinement
     # @param input_path [Pathname] path to source
     # @param frontmatter [Hash] Optional, overrides from "input_path"
     # @param body [String] Optional, overrides value from "input_path"
-    def initialize(layout: nil, input_path: nil, frontmatter: nil, body: nil, locals: {})
+    def initialize(layout: nil, input_path: nil, frontmatter: nil, body: nil, locals: {}, renderers: [])
       @layout = layout
       @input_path = input_path
       @frontmatter = frontmatter
       @body = body
       @locals = locals
+      @renderers = renderers
 
       @url_path = nil
     end
 
     attr_reader :input_path
-    attr_reader :output_path
+    attr_accessor :output_path
+    attr_accessor :rendered_body
     attr_reader :url_path
+    attr_reader :locals
+    attr_reader :renderers
 
     def url_path=(path)
       path = path.to_s
@@ -184,14 +222,119 @@ module Confinement
     end
   end
 
-  class HesitantCompiler
-    def initialize(site)
-      @lock = Mutex.new
+  class Renderer
+    class Erb
+      def call(source, view_context, &block)
+        compiled_erb = Erubi::Engine.new(source).src
 
-      @assets_hash = {}
+        view_context.instance_eval(compiled_erb, &block)
+      end
+    end
+  end
+
+  class Rendering
+    # TODO: Merge ViewContext and Page
+    class ViewContext
+      def initialize(routes:, locals:, contents_path:, layouts_path:)
+        self.parent_context = nil
+        self.locals = locals
+        self.routes = routes
+
+        @contents_path = contents_path
+        @layouts_path = layouts_path
+      end
+
+      attr_accessor :routes
+      attr_accessor :parent_context
+      attr_accessor :locals
+      attr_reader :contents_path
+      attr_reader :layouts_path
+
+      def dup_for_chain
+        the_dup = dup
+        the_dup.parent_context = self
+
+        the_dup
+      end
+
+      def render(page, renderers:, &block)
+        RenderChain.new(page: page, renderers: renderers, view_context: self).call(&block)
+      end
     end
 
-    def compile(site)
+    class RenderChain
+      def initialize(page:, renderers:, view_context:)
+        @page = page
+        @renderers = renderers
+        @view_context = view_context
+      end
+
+      def call(&block)
+        view_context = @view_context.dup_for_chain
+
+        @renderers.reduce(@page) do |memo, renderer|
+          renderer.call(memo, view_context, &block)
+        end
+      end
+    end
+  end
+
+  class HesitantCompiler
+    # As strange as it might seem, Routes is a public-facing interface to the
+    # HesitantCompiler.
+    #
+    # Let's assume the following (by "depends on", I mean that it links to the page)
+    #
+    #     index.html.erb depends on
+    #       about_me.html.erb which depends on
+    #         i_love_star_trek.html.erb
+    #
+    # We don't know where the compiler will start. If the compiler compiles in
+    # this order, we'll happen to have no dependency issues:
+    #
+    # 1. i_love_star_trek.html.erb
+    # 2. about_me.html.erb
+    # 3. index.html.erb
+    #
+    # However it's just as likely that `index.html.erb` would be compiled first.
+    # In that case, since the views will be accessing routes via this class
+    #
+    # How do we handle circular dependencies? With the circular flag, which
+    # bypasses compilation. But this is relatively dangerous.
+    class Routes
+      def initialize(representation, compiler)
+        @representation = representation
+        @compiler = compiler
+      end
+
+      def [](identifier, circular: false)
+        page = @representation.fetch(identifier)
+
+        if page.rendered_body || circular
+          return page
+        end
+
+        compile(page)
+
+        page
+      end
+
+      private
+
+      def compile(page)
+        @compiler.send(:compile_content, page)
+      end
+    end
+
+    def initialize(site)
+      @site = site
+      @routes = Routes.new(@site.representation, self)
+      @lock = Mutex.new
+    end
+
+    attr_reader :site
+
+    def compile_everything
       assets = {}
       contents = {}
 
@@ -203,9 +346,13 @@ module Confinement
         end
       end
 
-      # Assets first since it's almost always a dependency of contents
-      compile_assets(site, assets)
-      compile_contents(site, contents)
+      # All compilation happens inside the same lock. So we shouldn't have
+      # to worry about deadlocks or anything
+      @lock.synchronize do
+        # Assets first since it's almost always a dependency of contents
+        compile_assets(assets)
+        compile_contents(contents)
+      end
     end
 
     private
@@ -213,66 +360,112 @@ module Confinement
     PARCEL_FILES_OUTPUT_REGEX = /^✨[^\n]+\n\n(.*)Done in(?:.*)\z/m
     PARCEL_FILE_OUTPUT_REGEX = /^(?<page>.*?)\s+(?<size>[0-9\.]+\s*[A-Z]?B)\s+(?<time>[0-9\.]+[a-z]?s)$/
 
-    def compile_assets(site, assets)
-      @lock.synchronize do
-        if assets_dirty?
-          out, status = Open3.capture2(
-            "yarn",
-            "run",
-            "parcel",
-            "build",
-            "--dist-dir", site.assets_root.to_s,
-            "--public-url", site.assets_root.basename.to_s,
-            *assets.values.select(&:entrypoint?).map(&:input_path).map(&:to_s)
-          )
+    def compile_assets(assets)
+      if assets_dirty?
+        out, status = Open3.capture2(
+          "yarn",
+          "run",
+          "parcel",
+          "build",
+          "--dist-dir", site.assets_root.to_s,
+          "--public-url", site.assets_root.basename.to_s,
+          *assets.values.select(&:entrypoint?).map(&:input_path).map(&:to_s)
+        )
 
-          if !status.success?
-            raise "Asset compilation failed"
+        if !status.success?
+          raise "Asset compilation failed"
+        end
+
+        matches = PARCEL_FILES_OUTPUT_REGEX.match(out)[1]
+
+        if !matches
+          raise "Asset parsing failed"
+        end
+
+        processed_file_paths = matches.split("\n\n")
+
+        representation_by_input_path =
+          site.representation.filter_map do |_, page|
+            next if page.input_path.nil?
+
+            [page.input_path, page]
+          end
+          .to_h
+
+        parsed_parcel_output = processed_file_paths.map do |file|
+          output_file, input_file = file.strip.split("\n└── ")
+
+          output_path = site.root.join(output_file[PARCEL_FILE_OUTPUT_REGEX, 1])
+          input_path = site.root.join(input_file[PARCEL_FILE_OUTPUT_REGEX, 1])
+
+          if !representation_by_input_path.key?(input_path)
+            next
           end
 
-          matches = PARCEL_FILES_OUTPUT_REGEX.match(out)[1]
-
-          if !matches
-            raise "Asset parsing failed"
-          end
-
-          processed_file_paths = matches.split("\n\n")
-
-          representation_by_input_path =
-            site.representation.filter_map do |_, page|
-              next if page.input_path.nil?
-
-              [page.input_path, page]
-            end
-            .to_h
-
-          parsed_parcel_output = processed_file_paths.map do |file|
-            output_file, input_file = file.strip.split("\n└── ")
-
-            output_path = site.root.join(output_file[PARCEL_FILE_OUTPUT_REGEX, 1])
-            input_path = site.root.join(input_file[PARCEL_FILE_OUTPUT_REGEX, 1])
-
-            if !representation_by_input_path.key?(input_path)
-              next
-            end
-
-            url_path = output_path.relative_path_from(site.output_root)
-            representation_by_input_path[input_path].url_path = url_path.to_s
-            representation_by_input_path[input_path].output_path = output_path
-          end
+          url_path = output_path.relative_path_from(site.output_root)
+          representation_by_input_path[input_path].url_path = url_path.to_s
+          representation_by_input_path[input_path].output_path = output_path
         end
       end
     end
 
-    def compile_contents(site, contents)
-      @lock.synchronize do
+    def compile_content(content)
+      if content.rendered_body
+        return
+      end
+
+      view_context = Rendering::ViewContext.new(
+        routes: @routes,
+        locals: content.locals,
+        contents_path: site.contents_path,
+        layouts_path: site.layouts_path
+      )
+
+      content_body = content.input_path.read
+      content.rendered_body = view_context.render(content_body, renderers: content.renderers) || ""
+
+      content.output_path =
+        if content.url_path[-1] == "/"
+          site.output_root.concat(content.url_path, site.config.fetch(:index))
+        else
+          site.output_root.concat(content.url_path)
+        end
+
+      if content.output_path.exist?
+        if content.output_path.read == content.rendered_body
+          return
+        end
+      end
+
+      if !site.output_root.include?(content.output_path)
+        return
+      end
+
+      if !content.output_path.dirname.directory?
+        content.output_path.dirname.mkpath
+      end
+
+      content.output_path.write(content.rendered_body)
+
+      nil
+    end
+
+    def compile_contents(contents)
+      return if !contents_dirty?
+
+      contents.each do |_identifier, content|
+        compile_content(content)
       end
     end
 
     private
 
-    def assets_dirty?
+    def contents_dirty?
       true
+    end
+
+    def assets_dirty?
+      false
     end
   end
 
@@ -287,7 +480,7 @@ module Confinement
 
       puts "== Before"
       pp @site.representation
-      @compiler.compile(@site)
+      @compiler.compile_everything
       puts
       puts "== After"
       pp @site.representation
@@ -304,8 +497,5 @@ module Confinement
         destination.mkpath
       end
     end
-  end
-
-  module Easier
   end
 end

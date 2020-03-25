@@ -12,7 +12,8 @@ using Confinement::Easier
 Confinement.site.contents do |contents, dest|
   dest["/"] = Confinement::Page.new(
     layout: "default",
-    input_path: contents.join("index.html.erb")
+    input_path: contents.join("index.html.erb"),
+    renderers: [Confinement::Renderer::Erb.new]
   )
 
   blog_posts = contents.glob("posts/*.md*").filter_map do |blog_post|
@@ -22,7 +23,8 @@ Confinement.site.contents do |contents, dest|
 
     dest["/posts/#{unixtime}/"] = Confinement::Page.new(
       layout: "blog_post",
-      input_path: blog_post
+      input_path: blog_post,
+      renderers: [Confinement::Renderer::Erb.new]
     )
   end
 
@@ -31,27 +33,26 @@ Confinement.site.contents do |contents, dest|
     input_path: contents.join("posts.html.erb"),
     locals: {
       blog_posts: blog_posts
-    }
+    },
+    renderers: [Confinement::Renderer::Erb.new]
   )
 
   dest["/resume/"] = Confinement::Page.new(
     layout: "default",
     input_path: contents.join("resume.html.erb"),
+    renderers: [Confinement::Renderer::Erb.new]
   )
 
   dest["/resume.pdf"] = Confinement::Page.new(
     layout: "default",
     input_path: contents.join("resume.tex.erb"),
+    renderers: [Confinement::Renderer::Erb.new]
   )
 
   dest["/about/"] = Confinement::Page.new(
     layout: "default",
     input_path: contents.join("about.html.erb"),
-  )
-
-  dest["/about/rated/"] = Confinement::Page.new(
-    layout: "default",
-    input_path: contents.join("about-rated.html.erb"),
+    renderers: [Confinement::Renderer::Erb.new]
   )
 end
 
