@@ -140,7 +140,12 @@ module Confinement
 
     def initialize
       @lookup = {}
+      @grouped_assets = []
+      @grouped_contents = []
     end
+
+    attr_reader :grouped_assets
+    attr_reader :grouped_contents
 
     def fetch(key)
       if !@lookup.key?(key)
@@ -161,32 +166,25 @@ module Confinement
     end
 
     def contents
-      ContentsSetter.new(@lookup)
+      LookupSetter.new(@lookup, @grouped_contents, set_url_path: true)
     end
 
     def assets
-      AssetsSetter.new(@lookup)
+      LookupSetter.new(@lookup, @grouped_assets, set_url_path: false)
     end
 
-    class ContentsSetter
-      def initialize(lookup)
+    class LookupSetter
+      def initialize(lookup, group, set_url_path:)
         @lookup = lookup
+        @group = group
+        @set_url_path = set_url_path
       end
 
       def []=(key, value)
-        @lookup[key] = value
-        @lookup[key].url_path = key
-        @lookup[key]
-      end
-    end
+        @group.push(value)
 
-    class AssetsSetter
-      def initialize(lookup)
-        @lookup = lookup
-      end
-
-      def []=(key, value)
         @lookup[key] = value
+        @lookup[key].url_path = key if @set_url_path
         @lookup[key]
       end
     end
@@ -377,23 +375,12 @@ module Confinement
     attr_reader :site
 
     def compile_everything
-      assets = {}
-      contents = {}
-
-      site.representation.each do |identifier, page|
-        if page.kind_of?(Asset)
-          assets[identifier] = page
-        else
-          contents[identifier] = page
-        end
-      end
-
       # All compilation happens inside the same lock. So we shouldn't have
       # to worry about deadlocks or anything
       @lock.synchronize do
         # Assets first since it's almost always a dependency of contents
-        compile_assets(assets)
-        compile_contents(contents)
+        compile_assets(site.representation.grouped_assets)
+        compile_contents(site.representation.grouped_contents)
       end
     end
 
@@ -427,7 +414,7 @@ module Confinement
         processed_file_paths = matches.split("\n\n")
 
         representation_by_input_path =
-          site.representation.filter_map do |_, page|
+          site.representation.filter_map do |page|
             next if page.input_path.nil?
 
             [page.input_path, page]
@@ -495,7 +482,7 @@ module Confinement
     def compile_contents(contents)
       return if !contents_dirty?
 
-      contents.each do |_identifier, content|
+      contents.each do |content|
         compile_content(content)
       end
     end
