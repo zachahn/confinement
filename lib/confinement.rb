@@ -322,13 +322,11 @@ module Confinement
             raise %(Must pass in either a Pathname or `inline: 'text'`)
           end
 
-        duped_view_context = dup_for_chain
-
         render_chain = RenderChain.new(
           body: body,
           layout: layout,
           renderers: renderers,
-          view_context: duped_view_context
+          view_context: self
         )
         rendered_body = render_chain.call(&block)
 
@@ -337,7 +335,7 @@ module Confinement
             body: layout.read,
             layout: nil,
             renderers: renderers,
-            view_context: duped_view_context
+            view_context: self
           )
 
           layout_render_chain.call do
@@ -346,15 +344,6 @@ module Confinement
         else
           rendered_body
         end
-      end
-
-      private
-
-      def dup_for_chain
-        the_dup = dup
-        the_dup.parent_context = self
-
-        the_dup
       end
     end
 
