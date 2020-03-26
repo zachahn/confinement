@@ -8,9 +8,14 @@ class ConfinementTest < TestCase
     Dir.chdir(root) do
       compiled.rmtree if compiled.directory?
 
-      _, status = Open3.capture2("ruby", "write.rb")
+      stdout, status = Open3.capture2("ruby", "write.rb")
+
+      if !status.success?
+        puts stdout
+      end
 
       assert_equal(true, status.success?)
+
       assert_equal(<<~HTML, compiled.join("index.html").read)
         <h1>HOME PAGE</h1>
         /about/
@@ -27,6 +32,21 @@ class ConfinementTest < TestCase
         I AM A PARTIAL! 42
 
         after the partial
+      HTML
+      assert_equal(<<~HTML, compiled.join("view_with_layout.html").read)
+        <html>
+        <head>
+        <title>integration test!</title>
+        <link rel="stylesheet" type="text/css" href="/assets/application.css">
+        <script type="text/javascript" src="/assets/application.js"></script>
+        </head>
+        <body>
+        Before this is the layout
+        This part is the rendered file
+        After this is the layout
+
+        </body>
+        </html>
       HTML
 
       assert_equal(<<~JS.strip, compiled.join("assets/application.js").read)

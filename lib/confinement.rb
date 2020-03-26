@@ -7,6 +7,7 @@ elsif Gem.loaded_specs.has_key?("pry-byebug")
 end
 
 # standard library
+require "digest"
 require "open3"
 require "pathname"
 require "yaml"
@@ -30,6 +31,8 @@ module Confinement
       ^---\n)?
       (?<body>.*)\z/mx
 
+  PATH_INCLUDE_PATH_REGEX = /\A\.\.(\z|\/)/
+
   module Easier
     # NOTE: Avoid state - Pathname is supposed to be immutable
     refine Pathname do
@@ -44,7 +47,7 @@ module Confinement
       def include?(other)
         difference = other.relative_path_from(self)
 
-        !/\A\.\.(\z|\/)/.match?(difference.to_s)
+        !PATH_INCLUDE_PATH_REGEX.match?(difference.to_s)
       end
     end
 
@@ -111,7 +114,7 @@ module Confinement
     end
 
     def layouts_path
-      @layouts_path ||= @root.concat(@contents)
+      @layouts_path ||= @root.concat(@layouts)
     end
 
     def assets_path
@@ -123,7 +126,7 @@ module Confinement
         raise PathDoesNotExist, "Contents path doesn't exist: #{contents_path}"
       end
 
-      yield(contents_path, @representation.contents)
+      yield(contents_path, layouts_path, @representation.contents)
     end
 
     def assets
@@ -173,6 +176,10 @@ module Confinement
       LookupSetter.new(@lookup, @grouped_assets, set_url_path: false)
     end
 
+    def getter
+      LookupGetter.new(@lookup)
+    end
+
     class LookupSetter
       def initialize(lookup, group, set_url_path:)
         @lookup = lookup
@@ -186,6 +193,16 @@ module Confinement
         @lookup[key] = value
         @lookup[key].url_path = key if @set_url_path
         @lookup[key]
+      end
+    end
+
+    class LookupGetter
+      def initialize(lookup)
+        @lookup = lookup
+      end
+
+      def [](key)
+        @lookup.fetch(key)
       end
     end
   end
@@ -212,6 +229,7 @@ module Confinement
     attr_reader :url_path
     attr_reader :locals
     attr_reader :renderers
+    attr_reader :layout
 
     def url_path=(path)
       path = path.to_s
@@ -252,9 +270,25 @@ module Confinement
   class Renderer
     class Erb
       def call(source, view_context, &block)
-        compiled_erb = Erubi::Engine.new(source).src
+        method_name = "_#{Digest::MD5.hexdigest(source)}"
 
-        view_context.instance_eval(compiled_erb, &block)
+        compile(method_name, source, view_context)
+
+        view_context.public_send(method_name, &block)
+      end
+
+      private
+
+      def compile(method_name, source, view_context)
+        if !view_context.respond_to?(method_name)
+          compiled_erb = Erubi::Engine.new(source).src
+
+          view_context.instance_eval(<<~RUBY, __FILE__, __LINE__ + 1)
+            def #{method_name}
+              #{compiled_erb}
+            end
+          RUBY
+        end
       end
     end
   end
@@ -278,14 +312,7 @@ module Confinement
       attr_reader :contents_path
       attr_reader :layouts_path
 
-      def dup_for_chain
-        the_dup = dup
-        the_dup.parent_context = self
-
-        the_dup
-      end
-
-      def render(path = nil, inline: nil, renderers:, &block)
+      def render(path = nil, layout: nil, inline: nil, renderers:, &block)
         body =
           if path
             path.read
@@ -295,13 +322,46 @@ module Confinement
             raise %(Must pass in either a Pathname or `inline: 'text'`)
           end
 
-        RenderChain.new(body: body, renderers: renderers, view_context: self).call(&block)
+        duped_view_context = dup_for_chain
+
+        render_chain = RenderChain.new(
+          body: body,
+          layout: layout,
+          renderers: renderers,
+          view_context: duped_view_context
+        )
+        rendered_body = render_chain.call(&block)
+
+        if layout
+          layout_render_chain = RenderChain.new(
+            body: layout.read,
+            layout: nil,
+            renderers: renderers,
+            view_context: duped_view_context
+          )
+
+          layout_render_chain.call do
+            rendered_body
+          end
+        else
+          rendered_body
+        end
+      end
+
+      private
+
+      def dup_for_chain
+        the_dup = dup
+        the_dup.parent_context = self
+
+        the_dup
       end
     end
 
     class RenderChain
-      def initialize(body:, renderers:, view_context:)
+      def initialize(body:, layout:, renderers:, view_context:)
         @body = body
+        @layout = layout
         @renderers = renderers
         @view_context = view_context
       end
@@ -309,66 +369,18 @@ module Confinement
       def call(&block)
         frontmatter, body = @body.frontmatter_and_body
 
-        view_context = @view_context.dup_for_chain
-        view_context.frontmatter = frontmatter
+        @view_context.frontmatter = frontmatter
 
         @renderers.reduce(body) do |memo, renderer|
-          renderer.call(memo, view_context, &block)
+          renderer.call(memo, @view_context, &block)
         end
       end
     end
   end
 
   class HesitantCompiler
-    # As strange as it might seem, Routes is a public-facing interface to the
-    # HesitantCompiler.
-    #
-    # Let's assume the following (by "depends on", I mean that it links to the page)
-    #
-    #     index.html.erb depends on
-    #       about_me.html.erb which depends on
-    #         i_love_star_trek.html.erb
-    #
-    # We don't know where the compiler will start. If the compiler compiles in
-    # this order, we'll happen to have no dependency issues:
-    #
-    # 1. i_love_star_trek.html.erb
-    # 2. about_me.html.erb
-    # 3. index.html.erb
-    #
-    # However it's just as likely that `index.html.erb` would be compiled first.
-    # In that case, since the views will be accessing routes via this class
-    #
-    # How do we handle circular dependencies? With the circular flag, which
-    # bypasses compilation. But this is relatively dangerous.
-    class Routes
-      def initialize(representation, compiler)
-        @representation = representation
-        @compiler = compiler
-      end
-
-      def [](identifier, circular: false)
-        page = @representation.fetch(identifier)
-
-        if page.rendered_body || circular
-          return page
-        end
-
-        compile(page)
-
-        page
-      end
-
-      private
-
-      def compile(page)
-        @compiler.send(:compile_content, page)
-      end
-    end
-
     def initialize(site)
       @site = site
-      @routes = Routes.new(@site.representation, self)
       @lock = Mutex.new
     end
 
@@ -444,14 +456,19 @@ module Confinement
       end
 
       view_context = Rendering::ViewContext.new(
-        routes: @routes,
+        routes: site.representation.getter,
         locals: content.locals,
         contents_path: site.contents_path,
         layouts_path: site.layouts_path
       )
 
       content_body = content.input_path.read
-      content.rendered_body = view_context.render(inline: content_body, renderers: content.renderers) || ""
+      content.rendered_body = view_context.render(
+        inline: content_body,
+        layout: content.layout,
+        renderers: content.renderers
+      )
+      content.rendered_body ||= ""
 
       content.output_path =
         if content.url_path[-1] == "/"
@@ -507,12 +524,7 @@ module Confinement
     def write(path)
       find_or_raise_or_mkdir(path)
 
-      puts "== Before"
-      pp @site.representation
       @compiler.compile_everything
-      puts
-      puts "== After"
-      pp @site.representation
     end
 
     private
