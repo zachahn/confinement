@@ -1,6 +1,6 @@
----
-my_frontmatter: "hello"
----
-I AM A PARTIAL! <%= Time.now %>
-<%= frontmatter["my_frontmatter"] %>
-<%= frontmatter %>
+before the partial
+<%= render(
+  contents_path.join("_partial.html.erb"),
+  renderers: [Confinement::Renderer::Erb.new]
+) %>
+after the partial

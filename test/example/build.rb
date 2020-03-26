@@ -54,6 +54,18 @@ Confinement.site.contents do |contents, dest|
     input_path: contents.join("about.html.erb"),
     renderers: [Confinement::Renderer::Erb.new]
   )
+
+  dest["/frontmatter.html"] = Confinement::View.new(
+    layout: "default",
+    input_path: contents.join("frontmatter.html.erb"),
+    renderers: [Confinement::Renderer::Erb.new]
+  )
+
+  dest["/partial.html"] = Confinement::View.new(
+    layout: "default",
+    input_path: contents.join("partial.html.erb"),
+    renderers: [Confinement::Renderer::Erb.new]
+  )
 end
 
 #    _   ___ ___ ___ _____ ___

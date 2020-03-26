@@ -398,7 +398,7 @@ module Confinement
           "build",
           "--dist-dir", site.assets_root.to_s,
           "--public-url", site.assets_root.basename.to_s,
-          *assets.values.select(&:entrypoint?).map(&:input_path).map(&:to_s)
+          *assets.select(&:entrypoint?).map(&:input_path).map(&:to_s)
         )
 
         if !status.success?
@@ -414,7 +414,7 @@ module Confinement
         processed_file_paths = matches.split("\n\n")
 
         representation_by_input_path =
-          site.representation.filter_map do |page|
+          site.representation.grouped_assets.filter_map do |page|
             next if page.input_path.nil?
 
             [page.input_path, page]
@@ -494,7 +494,7 @@ module Confinement
     end
 
     def assets_dirty?
-      false
+      true
     end
   end
 
