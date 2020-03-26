@@ -44,19 +44,23 @@ module Confinement
       def include?(other)
         difference = other.relative_path_from(self)
 
-        difference.to_s !~ /\A..\b/
+        !/\A\.\.(\z|\/)/.match?(difference.to_s)
       end
     end
 
     refine String do
       def frontmatter_and_body(strip: true)
         matches = FRONTMATTER_REGEX.match(self)
-        frontmatter = matches["frontmatter"] || ""
-        frontmatter = YAML.safe_load(frontmatter)
+
+        return [{}, self] if matches["frontmatter"].nil?
+
+        frontmatter = YAML.safe_load(matches["frontmatter"])
         body = matches["body"] || ""
         body = body.strip if strip
 
         [frontmatter, body]
+      rescue ArgumentError
+        [{}, self]
       end
     end
   end
@@ -430,7 +434,7 @@ module Confinement
           end
           .to_h
 
-        parsed_parcel_output = processed_file_paths.map do |file|
+        processed_file_paths.map do |file|
           output_file, input_file = file.strip.split("\n└── ")
 
           output_path = site.root.concat(output_file[PARCEL_FILE_OUTPUT_REGEX, 1])
