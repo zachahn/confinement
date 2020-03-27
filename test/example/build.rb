@@ -10,7 +10,7 @@ using Confinement::Easier
 # |_|   \__,_|\__, |\___||___/
 #             |___/
 Confinement.site.contents do |contents, layouts, dest|
-  dest["/"] = Confinement::View.new(
+  dest["/"] = Confinement::Content.new(
     input_path: contents.join("index.html.erb"),
     renderers: [Confinement::Renderer::Erb.new]
   )
@@ -20,13 +20,13 @@ Confinement.site.contents do |contents, layouts, dest|
 
     next if unixtime.nil?
 
-    dest["/posts/#{unixtime}/"] = Confinement::View.new(
+    dest["/posts/#{unixtime}/"] = Confinement::Content.new(
       input_path: blog_post,
       renderers: [Confinement::Renderer::Erb.new]
     )
   end
 
-  dest["/posts/"] = Confinement::View.new(
+  dest["/posts/"] = Confinement::Content.new(
     input_path: contents.join("posts.html.erb"),
     locals: {
       blog_posts: blog_posts
@@ -34,33 +34,39 @@ Confinement.site.contents do |contents, layouts, dest|
     renderers: [Confinement::Renderer::Erb.new]
   )
 
-  dest["/resume/"] = Confinement::View.new(
+  dest["/resume/"] = Confinement::Content.new(
     input_path: contents.join("resume.html.erb"),
     renderers: [Confinement::Renderer::Erb.new]
   )
 
-  dest["/resume.pdf"] = Confinement::View.new(
+  dest["/resume.pdf"] = Confinement::Content.new(
     input_path: contents.join("resume.tex.erb"),
     renderers: [Confinement::Renderer::Erb.new]
   )
 
-  dest["/about/"] = Confinement::View.new(
+  dest["/about/"] = Confinement::Content.new(
     input_path: contents.join("about.html.erb"),
     renderers: [Confinement::Renderer::Erb.new]
   )
 
-  dest["/view_with_layout.html"] = Confinement::View.new(
+  dest["/view_with_layout.html"] = Confinement::Content.new(
     layout: layouts.join("default.html.erb"),
     input_path: contents.join("view_with_layout.html.erb"),
     renderers: [Confinement::Renderer::Erb.new]
   )
 
-  dest["/frontmatter.html"] = Confinement::View.new(
+  dest["/static_view_with_layout.html"] = Confinement::Content.new(
+    layout: layouts.join("default.html.erb"),
+    input_path: contents.join("static_view_with_layout.html"),
+    renderers: []
+  )
+
+  dest["/frontmatter.html"] = Confinement::Content.new(
     input_path: contents.join("frontmatter.html.erb"),
     renderers: [Confinement::Renderer::Erb.new]
   )
 
-  dest["/partial.html"] = Confinement::View.new(
+  dest["/partial.html"] = Confinement::Content.new(
     input_path: contents.join("partial.html.erb"),
     renderers: [Confinement::Renderer::Erb.new]
   )
@@ -80,5 +86,11 @@ Confinement.site.assets do |assets, dest|
   dest["/assets/application.css"] = Confinement::Asset.new(
     input_path: assets.join("application.css"),
     entrypoint: false,
+  )
+end
+
+Confinement.site.layouts do |layouts, dest|
+  dest[layouts.join("default.html.erb")] = Confinement::Layout.new(
+    renderers: [Confinement::Renderer::Erb.new]
   )
 end

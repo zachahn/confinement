@@ -42,8 +42,21 @@ class ConfinementTest < TestCase
         </head>
         <body>
         Before this is the layout
-        This part is the rendered file
+        This part is the rendered ERB file
         After this is the layout
+
+        </body>
+        </html>
+      HTML
+      assert_equal(<<~HTML, compiled.join("static_view_with_layout.html").read)
+        <html>
+        <head>
+        <title>integration test!</title>
+        <link rel="stylesheet" type="text/css" href="/assets/application.css">
+        <script type="text/javascript" src="/assets/application.js"></script>
+        </head>
+        <body>
+        I am just a html page
 
         </body>
         </html>
