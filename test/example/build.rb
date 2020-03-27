@@ -70,6 +70,10 @@ Confinement.site.contents do |contents, layouts, dest|
     input_path: contents.join("partial.html.erb"),
     renderers: [Confinement::Renderer::Erb.new]
   )
+  dest["view_with_embedded_asset.html"] = Confinement::Content.new(
+    input_path: contents.join("view_with_embedded_asset.html.erb"),
+    renderers: [Confinement::Renderer::Erb.new]
+  )
 end
 
 #    _   ___ ___ ___ _____ ___

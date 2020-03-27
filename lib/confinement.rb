@@ -235,7 +235,6 @@ module Confinement
     attr_accessor :input_path
     attr_accessor :output_path
     attr_reader :url_path
-    attr_accessor :rendered_body
 
     def url_path=(path)
       if path.nil?
@@ -262,6 +261,8 @@ module Confinement
       @url_path = nil
     end
 
+    attr_accessor :rendered_body
+
     def entrypoint?
       !!@entrypoint
     end
@@ -281,6 +282,8 @@ module Confinement
     attr_reader :locals
     attr_reader :renderers
     attr_reader :layout
+
+    attr_accessor :rendered_body
   end
 
   class Layout
@@ -466,6 +469,7 @@ module Confinement
           url_path = output_path.relative_path_from(site.output_root)
           representation_by_input_path[input_path].url_path = url_path.to_s
           representation_by_input_path[input_path].output_path = output_path
+          representation_by_input_path[input_path].rendered_body = output_path.read
         end
       end
     end
