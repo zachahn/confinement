@@ -59,7 +59,7 @@ module Confinement
 
         return [{}, self] if matches["frontmatter"].nil?
 
-        frontmatter = YAML.safe_load(matches["frontmatter"])
+        frontmatter = YAML.load(matches["frontmatter"], symbolize_names: true)
         body = matches["body"] || ""
         body = body.strip if strip
 

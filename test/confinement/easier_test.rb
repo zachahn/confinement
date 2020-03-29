@@ -21,7 +21,7 @@ class EasierTest < TestCase
     assert_equal([{}, "\xf0\x28\x8c\x28"], "\xf0\x28\x8c\x28".frontmatter_and_body)
     assert_equal([{}, "\ntesting\n"], "\ntesting\n".frontmatter_and_body)
 
-    assert_equal([{ "hello" => "world" }, "testing"], <<~TEST.frontmatter_and_body)
+    assert_equal([{ hello: "world" }, "testing"], <<~TEST.frontmatter_and_body)
       ---
       hello: world
       ---
@@ -29,7 +29,7 @@ class EasierTest < TestCase
       testing
     TEST
 
-    assert_equal([{ "hello" => "world" }, "\ntesting\n"], <<~TEST.frontmatter_and_body(strip: false))
+    assert_equal([{ hello: "world" }, "\ntesting\n"], <<~TEST.frontmatter_and_body(strip: false))
       ---
       hello: world
       ---

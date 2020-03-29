@@ -25,7 +25,7 @@ class ConfinementTest < TestCase
       HTML
       assert_equal(<<~HTML.strip, compiled.join("frontmatter.html").read)
         hello
-        {"my_frontmatter"=>"hello"}
+        {:my_frontmatter=>"hello"}
       HTML
       assert_equal(<<~HTML, compiled.join("partial.html").read)
         before the partial
