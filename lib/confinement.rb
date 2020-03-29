@@ -365,7 +365,6 @@ module Confinement
 
         render_chain = RenderChain.new(
           body: body,
-          layout: layout,
           path: path,
           renderers: renderers,
           view_context: self
@@ -384,7 +383,6 @@ module Confinement
 
           layout_render_chain = RenderChain.new(
             body: layout.input_path.read,
-            layout: nil,
             path: layout.input_path,
             renderers: layout.renderers,
             view_context: self
@@ -400,9 +398,8 @@ module Confinement
     end
 
     class RenderChain
-      def initialize(body:, layout:, path:, renderers:, view_context:)
+      def initialize(body:, path:, renderers:, view_context:)
         @body = body
-        @layout = layout
         @path = path
         @renderers = renderers
         @view_context = view_context
