@@ -14,6 +14,7 @@ require "yaml"
 
 # gems
 require "erubi"
+require "erubi/capture_end"
 
 # internal
 require_relative "confinement/version"
@@ -314,7 +315,7 @@ module Confinement
 
       def compile(method_name, source, view_context, path:)
         if !view_context.respond_to?(method_name)
-          compiled_erb = Erubi::CaptureEndEngine.new(source, bufvar: :@_buf).src
+          compiled_erb = Erubi::CaptureEndEngine.new(source, bufvar: :@_buf, ensure: true).src
 
           eval_location =
             if path
@@ -352,6 +353,14 @@ module Confinement
       attr_reader :frontmatter
       attr_reader :contents_path
       attr_reader :layouts_path
+
+      def capture
+        original_buffer = @_buf
+        @_buf = +""
+        return yield
+      ensure
+        @_buf = original_buffer
+      end
 
       def render(path = nil, inline: nil, layout: nil, renderers:, &block)
         body =
