@@ -297,21 +297,33 @@ module Confinement
 
   class Renderer
     class Erb
-      def call(source, view_context, &block)
-        method_name = "_#{Digest::MD5.hexdigest(source)}"
+      def call(source, view_context, path:, &block)
+        method_name =
+          if path
+            "_#{Digest::MD5.hexdigest(source)}__#{path.to_s.tr("^A-Za-z", "_")}"
+          else
+            "_#{Digest::MD5.hexdigest(source)}"
+          end
 
-        compile(method_name, source, view_context)
+        compile(method_name, source, view_context, path: path)
 
         view_context.public_send(method_name, &block)
       end
 
       private
 
-      def compile(method_name, source, view_context)
+      def compile(method_name, source, view_context, path:)
         if !view_context.respond_to?(method_name)
-          compiled_erb = Erubi::Engine.new(source).src
+          compiled_erb = Erubi::CaptureEndEngine.new(source, bufvar: :@_buf).src
 
-          view_context.instance_eval(<<~RUBY, __FILE__, __LINE__ + 1)
+          eval_location =
+            if path
+              [path.to_s, 1]
+            else
+              []
+            end
+
+          view_context.instance_eval(<<~RUBY, *eval_location)
             def #{method_name}
               #{compiled_erb}
             end
@@ -354,6 +366,7 @@ module Confinement
         render_chain = RenderChain.new(
           body: body,
           layout: layout,
+          path: path,
           renderers: renderers,
           view_context: self
         )
@@ -372,6 +385,7 @@ module Confinement
           layout_render_chain = RenderChain.new(
             body: layout.input_path.read,
             layout: nil,
+            path: layout.input_path,
             renderers: layout.renderers,
             view_context: self
           )
@@ -386,16 +400,17 @@ module Confinement
     end
 
     class RenderChain
-      def initialize(body:, layout:, renderers:, view_context:)
+      def initialize(body:, layout:, path:, renderers:, view_context:)
         @body = body
         @layout = layout
+        @path = path
         @renderers = renderers
         @view_context = view_context
       end
 
       def call(&block)
         @renderers.reduce(@body) do |memo, renderer|
-          renderer.call(memo, @view_context, &block)
+          renderer.call(memo, @view_context, path: @path, &block)
         end
       end
     end
@@ -492,6 +507,7 @@ module Confinement
       )
 
       content.rendered_body = view_context.render(
+        content.input_path,
         inline: content_body,
         layout: content.layout,
         renderers: content.renderers
