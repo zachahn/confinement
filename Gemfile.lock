@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    confinement (0.0.0)
+    confinement (0.0.1)
       erubi
 
 GEM
