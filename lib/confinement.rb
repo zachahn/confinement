@@ -274,7 +274,7 @@ module Confinement
       @entrypoint = entrypoint
     end
 
-    attr_accessor :rendered_body
+    attr_accessor :body
 
     def entrypoint?
       !!@entrypoint
@@ -295,8 +295,6 @@ module Confinement
     attr_accessor :locals
     attr_accessor :renderers
     attr_accessor :layout
-
-    attr_accessor :rendered_body
 
     def body
       parse_body_and_frontmatter
@@ -504,16 +502,12 @@ module Confinement
           url_path = output_path.relative_path_from(site.output_root)
           asset_files[input_path].url_path = url_path.to_s
           asset_files[input_path].output_path = output_path
-          asset_files[input_path].rendered_body = output_path.read
+          asset_files[input_path].body = output_path.read
         end
       end
     end
 
     def compile_content(content)
-      if content.rendered_body
-        return
-      end
-
       view_context = Rendering::ViewContext.new(
         routes: site.route_identifiers,
         layouts: site.layout_blobs,
@@ -523,7 +517,7 @@ module Confinement
         frontmatter: content.frontmatter
       )
 
-      content.rendered_body = view_context.render(content, layout: content.layout) || ""
+      rendered_body = view_context.render(content, layout: content.layout) || ""
 
       content.output_path =
         if content.url_path[-1] == "/"
@@ -533,7 +527,7 @@ module Confinement
         end
 
       if content.output_path.exist?
-        if content.output_path.read == content.rendered_body
+        if content.output_path.read == rendered_body
           return
         end
       end
@@ -546,7 +540,7 @@ module Confinement
         content.output_path.dirname.mkpath
       end
 
-      content.output_path.write(content.rendered_body)
+      content.output_path.write(rendered_body)
 
       nil
     end
