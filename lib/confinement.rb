@@ -257,10 +257,6 @@ module Confinement
     attr_accessor :output_path
     attr_reader :url_path
 
-    def basename
-      input_path&.basename
-    end
-
     def url_path=(new_url_path)
       @url_path = new_url_path.normalize_for_route
     end

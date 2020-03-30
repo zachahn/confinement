@@ -28,7 +28,7 @@ Confinement.site.build do |assets:, layouts:, contents:, routes:|
   end
 
   blog_posts = contents.init_many(%r{^posts/.*\.md.*}).filter_map do |blog_post|
-    unixtime = blog_post.basename.to_s[/^\d+/]
+    unixtime = blog_post.input_path.basename.to_s[/^\d+/]
 
     next if unixtime.nil?
 
