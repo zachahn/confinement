@@ -62,10 +62,11 @@ class ConfinementTest < TestCase
         </html>
       HTML
       assert_equal(<<~HTML, compiled.join("view_with_embedded_asset.html").read)
-      <style>
-      body{color:#00f}
-      </style>
+        <style>
+        body{color:#00f}
+        </style>
       HTML
+      assert_equal("very kewl", compiled.join("view_with_local_and_frontmatter_cooperation.html").read)
 
       assert_equal(<<~JS.strip, compiled.join("assets/application.js").read)
         console.log("JavaScript!");

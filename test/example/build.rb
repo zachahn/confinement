@@ -79,4 +79,10 @@ Confinement.site.build do |assets:, layouts:, contents:, routes:|
   routes["view_with_embedded_asset.html"] = contents.init("view_with_embedded_asset.html.erb") do |content|
     content.renderers = [Confinement::Renderer::Erb.new]
   end
+
+  routes["view_with_local_and_frontmatter_cooperation.html"] =
+    contents.init("view_with_local_and_frontmatter_cooperation.html.erb") do |content|
+      content.renderers = [Confinement::Renderer::Erb.new]
+      content.locals = { how_cool: "very #{content.frontmatter[:cool]}" }
+    end
 end
