@@ -8,7 +8,7 @@ require "confinement"
 
 Confinement.root = __dir__
 
-Confinement.site = Confinement::Builder.new(
+Confinement.site = Confinement::Site.new(
   root: Confinement.root,
   assets: "assets",
   contents: "contents",

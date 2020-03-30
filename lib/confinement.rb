@@ -67,6 +67,10 @@ module Confinement
       rescue ArgumentError
         [{}, self]
       end
+
+      def normalize_for_route
+        "/#{self}".squeeze("/")
+      end
     end
   end
 
@@ -89,7 +93,7 @@ module Confinement
     end
   end
 
-  class Builder
+  class Site
     def initialize(root:, assets:, contents:, layouts:, config: {})
       @root = root
       @assets = assets
@@ -102,134 +106,136 @@ module Confinement
       @output_root = root.concat(config.fetch(:destination_root, "public"))
       @assets_root = @output_root.concat(config.fetch(:assets_subdirectory, "assets"))
 
-      @representation = Representation.new
+      @route_identifiers = RouteIdentifiers.new
+      @asset_blobs = Blobs.new(scoped_root: assets_path, file_abstraction_class: Asset)
+      @content_blobs = Blobs.new(scoped_root: contents_path, file_abstraction_class: Content)
+      @layout_blobs = Blobs.new(scoped_root: layouts_path, file_abstraction_class: Layout)
     end
 
     attr_reader :root
     attr_reader :output_root
     attr_reader :assets_root
-    attr_reader :representation
     attr_reader :config
 
+    attr_reader :route_identifiers
+    attr_reader :asset_blobs
+    attr_reader :content_blobs
+    attr_reader :layout_blobs
+
+    def build
+      yield(
+        assets: @asset_blobs,
+        layouts: @layout_blobs,
+        contents: @content_blobs,
+        routes: @route_identifiers
+      )
+
+      nil
+    end
+
     def contents_path
-      @contents_path ||= @root.concat(@contents)
+      @contents_path ||= @root.concat(@contents).cleanpath
     end
 
     def layouts_path
-      @layouts_path ||= @root.concat(@layouts)
+      @layouts_path ||= @root.concat(@layouts).cleanpath
     end
 
     def assets_path
-      @assets_path ||= @root.concat(@assets)
-    end
-
-    def layouts
-      if !layouts_path.exist?
-        raise PathDoesNotExist, "Layouts path doesn't exist: #{layouts_path}"
-      end
-
-      yield(layouts_path, @representation.layouts)
-    end
-
-    def assets
-      if !assets_path.exist?
-        raise PathDoesNotExist, "Assets path doesn't exist: #{assets_path}"
-      end
-
-      yield(assets_path, @representation.assets)
-    end
-
-    def contents
-      if !contents_path.exist?
-        raise PathDoesNotExist, "Contents path doesn't exist: #{contents_path}"
-      end
-
-      yield(contents_path, layouts_path, @representation.contents)
+      @assets_path ||= @root.concat(@assets).cleanpath
     end
   end
 
-  class Representation
-    include Enumerable
-
+  # RouteIdentifiers is called such because it doesn't hold the actual
+  # content's route. The content's own `url_path` does.
+  #
+  # This is mainly so that assets could be referenced internally with a static
+  # identifier even though it could have a hashed route.
+  class RouteIdentifiers
     def initialize
-      @lookup = {}
-      @layouts_lookup = {}
-      @only_assets = []
-      @only_contents = []
+      self.lookup = {}
     end
 
-    attr_reader :only_assets
-    attr_reader :layouts_lookup
-    attr_reader :only_contents
+    def [](route)
+      route = route.normalize_for_route
 
-    def fetch(key)
-      if !@lookup.key?(key)
-        raise "Not represented!"
+      if !lookup.key?(route)
+        raise "Route is not defined"
       end
 
-      @lookup[key]
+      self.lookup[route]
     end
 
-    def each
-      if !block_given?
-        return enum_for(:each)
+    def []=(route, content)
+      route = route.normalize_for_route
+
+      if lookup.key?(route)
+        raise "Route already defined!"
       end
 
-      @lookup.each do |identifier, page|
-        yield(identifier, page)
-      end
+      content.url_path = route
+
+      lookup[route] = content
     end
 
-    def layouts
-      Setter.new(@layouts_lookup) do |path, layout|
-        layout.input_path = path
-      end
+    private
+
+    attr_accessor :lookup
+  end
+
+  class Blobs
+    def initialize(scoped_root:, file_abstraction_class:)
+      self.scoped_root = scoped_root
+      self.file_abstraction_class = file_abstraction_class
+      self.lookup = {}
     end
 
-    def assets
-      Setter.new(@lookup) do |identifier, asset|
-        @only_assets.push(asset)
-        asset.url_path = identifier
-      end
+    def join(*parts)
+      scoped_root.concat(*parts)
     end
 
-    def contents
-      Setter.new(@lookup) do |identifier, content|
-        @only_contents.push(content)
-        content.url_path = identifier
-      end
-    end
+    def [](relpath)
+      abspath = into_abspath(relpath)
 
-    def routes_getter
-      LookupGetter.new(@lookup)
-    end
-
-    def layouts_getter
-      LookupGetter.new(@layouts_lookup)
-    end
-
-    class Setter
-      def initialize(lookup, &block)
-        @lookup = lookup
-        @block = block
+      if !lookup.key?(abspath)
+        raise "Don't know about this blob: #{abspath.inspect}"
       end
 
-      def []=(key, value)
-        @block&.call(key, value)
+      lookup[abspath]
+    end
 
-        @lookup[key] = value
+    def init(relpath, **initializer_options)
+      abspath = into_abspath(relpath)
+      lookup[abspath] ||= file_abstraction_class.new(input_path: abspath, **initializer_options)
+      yield lookup[abspath] if block_given?
+      lookup[abspath]
+    end
+
+    def init_many(pattern)
+      files_lookup.filter_map do |relpath, abspath|
+        if pattern.match?(relpath)
+          lookup[abspath.to_s] ||= file_abstraction_class.new(input_path: abspath)
+        end
       end
     end
 
-    class LookupGetter
-      def initialize(lookup)
-        @lookup = lookup
-      end
+    private
 
-      def [](key)
-        @lookup.fetch(key)
-      end
+    def into_abspath(relpath)
+      scoped_root.concat(relpath).cleanpath
     end
+
+    def files_lookup
+      @files_lookup ||=
+        scoped_root
+        .glob("**/*")
+        .map { |path| [path.relative_path_from(scoped_root).to_s, path] }
+        .to_h
+    end
+
+    attr_accessor :scoped_root
+    attr_accessor :file_abstraction_class
+    attr_accessor :lookup
   end
 
   module Blob
@@ -237,18 +243,12 @@ module Confinement
     attr_accessor :output_path
     attr_reader :url_path
 
-    def url_path=(path)
-      if path.nil?
-        @url_path = nil
-        return
-      end
+    def basename
+      input_path&.basename
+    end
 
-      path = path.to_s
-      if path[0] != "/"
-        path = "/#{path}"
-      end
-
-      @url_path = path
+    def url_path=(new_url_path)
+      @url_path = new_url_path.normalize_for_route
     end
   end
 
@@ -257,9 +257,7 @@ module Confinement
 
     def initialize(input_path:, entrypoint:)
       self.input_path = input_path
-
       @entrypoint = entrypoint
-      @url_path = nil
     end
 
     attr_accessor :rendered_body
@@ -272,7 +270,7 @@ module Confinement
   class Content
     include Blob
 
-    def initialize(layout: nil, input_path: nil, locals: {}, renderers: [])
+    def initialize(input_path:, layout: nil, locals: {}, renderers: [])
       self.input_path = input_path
 
       @layout = layout
@@ -280,20 +278,47 @@ module Confinement
       @renderers = renderers
     end
 
-    attr_reader :locals
-    attr_reader :renderers
-    attr_reader :layout
+    attr_accessor :locals
+    attr_accessor :renderers
+    attr_accessor :layout
 
     attr_accessor :rendered_body
+
+    def body
+      parse_body_and_frontmatter
+      @body
+    end
+
+    def frontmatter
+      parse_body_and_frontmatter
+      @frontmatter
+    end
+
+    private
+
+    def parse_body_and_frontmatter
+      return if defined?(@frontmatter) && defined?(@body)
+      @frontmatter, @body = input_path.read.frontmatter_and_body
+    end
   end
 
   class Layout
-    def initialize(renderers:)
-      @renderers = renderers
+    def initialize(input_path:, renderers:)
+      self.input_path = input_path
+      self.renderers = renderers
     end
 
     attr_reader :renderers
-    attr_accessor :input_path
+    attr_reader :input_path
+
+    def body
+      @body ||= input_path.read
+    end
+
+    private
+
+    attr_writer :input_path
+    attr_writer :renderers
   end
 
   class Renderer
@@ -319,7 +344,7 @@ module Confinement
 
           eval_location =
             if path
-              [path.to_s, 1]
+              [path.to_s, 0]
             else
               []
             end
@@ -336,23 +361,22 @@ module Confinement
 
   class Rendering
     class ViewContext
-      def initialize(routes:, layouts:, locals:, frontmatter:, contents_path:, layouts_path:)
+      def initialize(routes:, layouts:, assets:, contents:, locals:, frontmatter:)
         @routes = routes
         @layouts = layouts
+        @assets = assets
+        @contents = contents
 
         @locals = locals
         @frontmatter = frontmatter
-
-        @contents_path = contents_path
-        @layouts_path = layouts_path
       end
 
       attr_reader :routes
       attr_reader :layouts
+      attr_reader :assets
+      attr_reader :contents
       attr_reader :locals
       attr_reader :frontmatter
-      attr_reader :contents_path
-      attr_reader :layouts_path
 
       def capture
         original_buffer = @_buf
@@ -362,36 +386,18 @@ module Confinement
         @_buf = original_buffer
       end
 
-      def render(path = nil, inline: nil, layout: nil, renderers:, &block)
-        body =
-          if inline
-            inline
-          elsif path
-            path.read
-          else
-            raise %(Must pass in either a Pathname or `inline: 'text'`)
-          end
-
+      def render(blob, layout: nil, &block)
         render_chain = RenderChain.new(
-          body: body,
-          path: path,
-          renderers: renderers,
+          body: blob.body,
+          path: blob.input_path,
+          renderers: blob.renderers,
           view_context: self
         )
         rendered_body = render_chain.call(&block)
 
         if layout
-          layout =
-            if layout.is_a?(Layout)
-              layout
-            elsif layout.is_a?(Pathname)
-              layouts[layout]
-            else
-              raise "Expected layout to be a Layout or Pathname"
-            end
-
           layout_render_chain = RenderChain.new(
-            body: layout.input_path.read,
+            body: layout.body,
             path: layout.input_path,
             renderers: layout.renderers,
             view_context: self
@@ -435,8 +441,8 @@ module Confinement
       # to worry about deadlocks or anything
       @lock.synchronize do
         # Assets first since it's almost always a dependency of contents
-        compile_assets(site.representation.only_assets)
-        compile_contents(site.representation.only_contents)
+        compile_assets(site.asset_blobs.send(:lookup))
+        compile_contents(site.route_identifiers.send(:lookup).values)
       end
     end
 
@@ -445,7 +451,9 @@ module Confinement
     PARCEL_FILES_OUTPUT_REGEX = /^✨[^\n]+\n\n(.*)Done in(?:.*)\z/m
     PARCEL_FILE_OUTPUT_REGEX = /^(?<page>.*?)\s+(?<size>[0-9\.]+\s*[A-Z]?B)\s+(?<time>[0-9\.]+[a-z]?s)$/
 
-    def compile_assets(assets)
+    def compile_assets(asset_files)
+      asset_paths = asset_files.values
+
       if assets_dirty?
         out, status = Open3.capture2(
           "yarn",
@@ -454,7 +462,7 @@ module Confinement
           "build",
           "--dist-dir", site.assets_root.to_s,
           "--public-url", site.assets_root.basename.to_s,
-          *assets.select(&:entrypoint?).map(&:input_path).map(&:to_s)
+          *asset_paths.select(&:entrypoint?).map(&:input_path).map(&:to_s)
         )
 
         if !status.success?
@@ -469,28 +477,20 @@ module Confinement
 
         processed_file_paths = matches.split("\n\n")
 
-        representation_by_input_path =
-          site.representation.only_assets.filter_map do |page|
-            next if page.input_path.nil?
-
-            [page.input_path, page]
-          end
-          .to_h
-
         processed_file_paths.map do |file|
           output_file, input_file = file.strip.split("\n└── ")
 
           output_path = site.root.concat(output_file[PARCEL_FILE_OUTPUT_REGEX, 1])
           input_path = site.root.concat(input_file[PARCEL_FILE_OUTPUT_REGEX, 1])
 
-          if !representation_by_input_path.key?(input_path)
+          if !asset_files.key?(input_path)
             next
           end
 
           url_path = output_path.relative_path_from(site.output_root)
-          representation_by_input_path[input_path].url_path = url_path.to_s
-          representation_by_input_path[input_path].output_path = output_path
-          representation_by_input_path[input_path].rendered_body = output_path.read
+          asset_files[input_path].url_path = url_path.to_s
+          asset_files[input_path].output_path = output_path
+          asset_files[input_path].rendered_body = output_path.read
         end
       end
     end
@@ -500,25 +500,16 @@ module Confinement
         return
       end
 
-      content_body = content.input_path.read
-      frontmatter, content_body = content_body.frontmatter_and_body
-
       view_context = Rendering::ViewContext.new(
-        routes: site.representation.routes_getter,
-        layouts: site.representation.layouts_getter,
+        routes: site.route_identifiers,
+        layouts: site.layout_blobs,
+        assets: site.asset_blobs,
+        contents: site.content_blobs,
         locals: content.locals,
-        frontmatter: frontmatter,
-        contents_path: site.contents_path,
-        layouts_path: site.layouts_path
+        frontmatter: content.frontmatter
       )
 
-      content.rendered_body = view_context.render(
-        content.input_path,
-        inline: content_body,
-        layout: content.layout,
-        renderers: content.renderers
-      )
-      content.rendered_body ||= ""
+      content.rendered_body = view_context.render(content, layout: content.layout) || ""
 
       content.output_path =
         if content.url_path[-1] == "/"

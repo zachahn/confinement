@@ -1,6 +1,3 @@
 before the partial
-<%= render(
-  contents_path.join("_partial.html.erb"),
-  renderers: [Confinement::Renderer::Erb.new]
-) %>
+<%= render(contents["_partial.html.erb"]) %>
 after the partial
