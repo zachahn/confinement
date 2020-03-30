@@ -130,6 +130,11 @@ module Confinement
         routes: @route_identifiers
       )
 
+      @asset_blobs.done!
+      @layout_blobs.done!
+      @content_blobs.done!
+      @route_identifiers.done!
+
       nil
     end
 
@@ -156,6 +161,10 @@ module Confinement
       self.lookup = {}
     end
 
+    def done!
+      @done = true
+    end
+
     def [](route)
       route = route.normalize_for_route
 
@@ -167,6 +176,8 @@ module Confinement
     end
 
     def []=(route, content)
+      raise "Can't add more routes after initial setup" if @done
+
       route = route.normalize_for_route
 
       if lookup.key?(route)
@@ -188,10 +199,11 @@ module Confinement
       self.scoped_root = scoped_root
       self.file_abstraction_class = file_abstraction_class
       self.lookup = {}
+      @done = false
     end
 
-    def join(*parts)
-      scoped_root.concat(*parts)
+    def done!
+      @done = true
     end
 
     def [](relpath)
@@ -205,6 +217,8 @@ module Confinement
     end
 
     def init(relpath, **initializer_options)
+      raise "Can't add more #{file_abstraction_class}s after the initial setup!" if @done
+
       abspath = into_abspath(relpath)
       lookup[abspath] ||= file_abstraction_class.new(input_path: abspath, **initializer_options)
       yield lookup[abspath] if block_given?
@@ -472,7 +486,7 @@ module Confinement
         matches = PARCEL_FILES_OUTPUT_REGEX.match(out)[1]
 
         if !matches
-          raise "Asset parsing failed"
+          raise "Asset compilation output parsing failed"
         end
 
         processed_file_paths = matches.split("\n\n")
