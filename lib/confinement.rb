@@ -348,7 +348,10 @@ module Confinement
 
       def compile(method_name, source, view_context, path:)
         if !view_context.respond_to?(method_name)
-          compiled_erb = Erubi::CaptureEndEngine.new(source, bufvar: :@_buf, ensure: true).src
+          compiled_erb =
+            Erubi::CaptureEndEngine
+            .new(source, bufvar: :@_buf, ensure: true, yield_returns_buffer: true)
+            .src
 
           eval_location =
             if path
@@ -389,7 +392,8 @@ module Confinement
       def capture
         original_buffer = @_buf
         @_buf = +""
-        return yield
+        yield
+        @_buf
       ensure
         @_buf = original_buffer
       end
@@ -401,7 +405,14 @@ module Confinement
           renderers: blob.renderers,
           view_context: self
         )
-        rendered_body = render_chain.call(&block)
+        rendered_body =
+          if block_given?
+            render_chain.call do
+              capture { yield }
+            end
+          else
+            render_chain.call
+          end
 
         if layout
           layout_render_chain = RenderChain.new(
