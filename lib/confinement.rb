@@ -497,19 +497,22 @@ module Confinement
         processed_file_paths = matches.split("\n\n")
 
         processed_file_paths.map do |file|
-          output_file, input_file = file.strip.split("\n└── ")
+          output_file, *input_files = file.strip.split(/\n(?:└|├)── /)
 
           output_path = site.root.concat(output_file[PARCEL_FILE_OUTPUT_REGEX, 1])
-          input_path = site.root.concat(input_file[PARCEL_FILE_OUTPUT_REGEX, 1])
 
-          if !asset_files.key?(input_path)
-            next
+          input_files.each do |input_file|
+            input_path = site.root.concat(input_file[PARCEL_FILE_OUTPUT_REGEX, 1])
+
+            if !asset_files.key?(input_path)
+              next
+            end
+
+            url_path = output_path.relative_path_from(site.output_root)
+            asset_files[input_path].url_path = url_path.to_s
+            asset_files[input_path].output_path = output_path
+            asset_files[input_path].body = output_path.read
           end
-
-          url_path = output_path.relative_path_from(site.output_root)
-          asset_files[input_path].url_path = url_path.to_s
-          asset_files[input_path].output_path = output_path
-          asset_files[input_path].body = output_path.read
         end
       end
     end
