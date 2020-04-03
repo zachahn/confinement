@@ -52,10 +52,6 @@ Confinement.site.build do |assets:, layouts:, contents:, routes:|
     content.renderers = [Confinement::Renderer::Erb.new]
   end
 
-  routes["/about/"] = contents.init("about.html.erb") do |content|
-    content.renderers = [Confinement::Renderer::Erb.new]
-  end
-
   routes["/view_with_layout.html"] = contents.init("view_with_layout.html.erb") do |content|
     content.layout = layouts["default.html.erb"]
     content.renderers = [Confinement::Renderer::Erb.new]
@@ -66,15 +62,11 @@ Confinement.site.build do |assets:, layouts:, contents:, routes:|
     content.renderers = []
   end
 
-  routes["/frontmatter.html"] = contents.init("frontmatter.html.erb") do |content|
-    content.renderers = [Confinement::Renderer::Erb.new]
-  end
+  routes["/frontmatter.html"] = contents.init("frontmatter.html.erb")
 
-  contents.init("_partial.html.erb", renderers: [Confinement::Renderer::Erb.new])
+  contents.init("_partial.html.erb")
 
-  routes["/partial.html"] = contents.init("partial.html.erb") do |content|
-    content.renderers = [Confinement::Renderer::Erb.new]
-  end
+  routes["/partial.html"] = contents.init("partial.html.erb")
 
   routes["view_with_embedded_asset.html"] = contents.init("view_with_embedded_asset.html.erb") do |content|
     content.renderers = [Confinement::Renderer::Erb.new]

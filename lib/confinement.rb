@@ -94,11 +94,12 @@ module Confinement
   end
 
   class Site
-    def initialize(root:, assets:, contents:, layouts:, config: {})
+    def initialize(root:, assets:, contents:, layouts:, guesses: Renderer.guesses, config: {})
       @root = root
       @assets = assets
       @contents = contents
       @layouts = layouts
+      @guessing_registry = guesses
       @config = {
         index: config.fetch(:index, "index.html")
       }
@@ -121,6 +122,7 @@ module Confinement
     attr_reader :asset_blobs
     attr_reader :content_blobs
     attr_reader :layout_blobs
+    attr_reader :guessing_registry
 
     def build
       yield(
@@ -130,12 +132,30 @@ module Confinement
         routes: @route_identifiers
       )
 
+      guesser = Rendering::Guesser.new(guessing_registry)
+      guess_renderers(guesser, @layout_blobs)
+      guess_renderers(guesser, @content_blobs)
+
       @asset_blobs.done!
       @layout_blobs.done!
       @content_blobs.done!
       @route_identifiers.done!
 
       nil
+    end
+
+    private
+
+    def guess_renderers(guesser, blobs)
+      blobs.send(:lookup).values.each do |blob|
+        blob.renderers = blob.renderers.flat_map do |renderer|
+          if renderer == :guess
+            guesser.call(blob.input_path)
+          else
+            renderer
+          end
+        end
+      end
     end
 
     def contents_path
@@ -254,6 +274,9 @@ module Confinement
 
   module Blob
     attr_accessor :input_path
+  end
+
+  module RouteableBlob
     attr_accessor :output_path
     attr_reader :url_path
 
@@ -262,8 +285,17 @@ module Confinement
     end
   end
 
+  module RenderableBlob
+    attr_reader :renderers
+
+    def renderers=(new_renderers)
+      @renderers = Array(new_renderers)
+    end
+  end
+
   class Asset
     include Blob
+    include RouteableBlob
 
     def initialize(input_path:, entrypoint:)
       self.input_path = input_path
@@ -279,17 +311,18 @@ module Confinement
 
   class Content
     include Blob
+    include RouteableBlob
+    include RenderableBlob
 
-    def initialize(input_path:, layout: nil, locals: {}, renderers: [])
+    def initialize(input_path:, layout: nil, locals: {}, renderers: :guess)
       self.input_path = input_path
 
-      @layout = layout
-      @locals = locals
-      @renderers = renderers
+      self.layout = layout
+      self.locals = locals
+      self.renderers = renderers
     end
 
     attr_accessor :locals
-    attr_accessor :renderers
     attr_accessor :layout
 
     def body
@@ -311,25 +344,26 @@ module Confinement
   end
 
   class Layout
-    def initialize(input_path:, renderers:)
+    include Blob
+    include RenderableBlob
+
+    def initialize(input_path:, renderers: :guess)
       self.input_path = input_path
       self.renderers = renderers
     end
 
-    attr_reader :renderers
-    attr_reader :input_path
-
     def body
       @body ||= input_path.read
     end
-
-    private
-
-    attr_writer :input_path
-    attr_writer :renderers
   end
 
   class Renderer
+    def self.guesses
+      @guesses ||= {
+        "erb" => -> { Erb.new }
+      }
+    end
+
     class Erb
       def call(source, view_context, path:, &block)
         method_name =
@@ -371,6 +405,26 @@ module Confinement
   end
 
   class Rendering
+    class Guesser
+      def initialize(guessing_registry)
+        @guessing_registry = guessing_registry
+      end
+
+      def call(path)
+        basename = path.basename.to_s
+        extensions = basename.split(".")[1..-1]
+
+        extensions.reverse.filter_map do |extension|
+          next if !@guessing_registry.key?(extension)
+
+          guess = @guessing_registry[extension]
+          guess = guess.call if guess.is_a?(Proc)
+
+          guess
+        end
+      end
+    end
+
     class ViewContext
       def initialize(routes:, layouts:, assets:, contents:, locals:, frontmatter:)
         @routes = routes
@@ -517,6 +571,14 @@ module Confinement
       end
     end
 
+    def compile_contents(contents)
+      return if !contents_dirty?
+
+      contents.each do |content|
+        compile_content(content)
+      end
+    end
+
     def compile_content(content)
       view_context = Rendering::ViewContext.new(
         routes: site.route_identifiers,
@@ -553,14 +615,6 @@ module Confinement
       content.output_path.write(rendered_body)
 
       nil
-    end
-
-    def compile_contents(contents)
-      return if !contents_dirty?
-
-      contents.each do |content|
-        compile_content(content)
-      end
     end
 
     private

@@ -18,7 +18,6 @@ class ConfinementTest < TestCase
 
       assert_equal(<<~HTML, compiled.join("index.html").read)
         <h1>HOME PAGE</h1>
-        /about/
         /posts/
         /resume/
         /resume.pdf
