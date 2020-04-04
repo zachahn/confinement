@@ -533,6 +533,7 @@ module Confinement
           "run",
           "parcel",
           "build",
+          "--no-cache",
           "--dist-dir", site.assets_root.to_s,
           "--public-url", site.assets_root.basename.to_s,
           *asset_paths.select(&:entrypoint?).map(&:input_path).map(&:to_s)
@@ -634,8 +635,8 @@ module Confinement
       @compiler = HesitantCompiler.new(@site)
     end
 
-    def write(path)
-      find_or_raise_or_mkdir(path)
+    def write
+      find_or_raise_or_mkdir(@site.output_root)
 
       @compiler.compile_everything
     end
