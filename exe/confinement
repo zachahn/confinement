@@ -109,8 +109,6 @@ module Confinement
         end
 
         Dir.chdir(root) do
-          run(["yarn", "init", "--yes"])
-
           run(["yarn", "add", "--dev", "parcel@nightly"])
         end
       end
@@ -182,7 +180,7 @@ require "confinement"
 
 Confinement.root = __dir__
 
-Confinement.site = Confinement::Builder.new(
+Confinement.site = Confinement::Site.new(
   root: Confinement.root,
   assets: "assets",
   contents: "contents",
@@ -195,48 +193,50 @@ Confinement.site = Confinement::Builder.new(
 ==> build.rb
 require_relative "boot"
 
-using Confinement::Easier
+Confinement.site.build do |assets:, layouts:, contents:, routes:|
+  assets.init("application.js", entrypoint: true)
+  assets.init("application.css", entrypoint: false)
 
-Confinement.site.contents do |contents, layouts, dest|
-  dest["/"] = Confinement::Content.new(
-    layout: layouts.join("default.html.erb"),
-    input_path: contents.join("index.html.erb"),
-    renderers: [Confinement::Renderer::Erb.new]
-  )
-end
+  layouts.init("default.html.erb")
 
-Confinement.site.assets do |assets, dest|
-  dest["/assets/application.js"] = Confinement::Asset.new(
-    input_path: assets.join("application.js"),
-    entrypoint: true,
-  )
-
-  dest["/assets/application.css"] = Confinement::Asset.new(
-    input_path: assets.join("application.css"),
-    entrypoint: false,
-  )
-end
-
-Confinement.site.layouts do |layouts, dest|
-  dest[layouts.join("default.html.erb")] = Confinement::Layout.new(
-    renderers: [Confinement::Renderer::Erb.new]
-  )
+  routes["/"] = contents.init("index.html.erb") do |content|
+    content.layout = layouts["default.html.erb"]
+  end
 end
 
 ==> write.rb
 require_relative "build"
 
-Confinement::Publish
-  .new(Confinement.site)
-  .write(Confinement.root.join("public"))
+Confinement::Publish.new(Confinement.site).write
+
+==> package.json
+{
+  "name": "website",
+  "version": "1.0.0",
+  "license": "UNLICENSED",
+  "devDependencies": {
+  },
+  "dependencies": {
+  }
+}
 
 ==> assets/application.js
 import "./application.css";
 
 ==> assets/application.css
+body { color: blue }
 
 ==> layouts/default.html.erb
+<!DOCTYPE HTML>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="<%= assets["application.css"].url_path %>" charset="utf-8">
+  </head>
+  <body>
+    <%= yield %>
+  </body>
+</html>
 
 ==> contents/index.html.erb
-
-
+hello!
