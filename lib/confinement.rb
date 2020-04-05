@@ -94,12 +94,23 @@ module Confinement
   end
 
   class Site
-    def initialize(root:, assets:, contents:, layouts:, guesses: Renderer.guesses, config: {})
+    def initialize(
+      root:,
+      assets:,
+      contents:,
+      layouts:,
+      view_context_helpers: [],
+      guesses: Renderer.guesses,
+      config: {}
+    )
       @root = root
       @assets = assets
       @contents = contents
       @layouts = layouts
+
+      @view_context_helpers = view_context_helpers
       @guessing_registry = guesses
+
       @config = {
         index: config.fetch(:index, "index.html")
       }
@@ -122,6 +133,8 @@ module Confinement
     attr_reader :asset_blobs
     attr_reader :content_blobs
     attr_reader :layout_blobs
+
+    attr_reader :view_context_helpers
     attr_reader :guessing_registry
 
     def build
@@ -589,6 +602,10 @@ module Confinement
         locals: content.locals,
         frontmatter: content.frontmatter
       )
+
+      site.view_context_helpers.each do |helper|
+        view_context.extend(helper)
+      end
 
       rendered_body = view_context.render(content, layout: content.layout) || ""
 
