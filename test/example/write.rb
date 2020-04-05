@@ -1,5 +1,3 @@
 require_relative "build"
 
-Confinement::Publish
-  .new(Confinement.site)
-  .write(Confinement.root.join("public"))
+Confinement::Publish.new(Confinement.site).write
