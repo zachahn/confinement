@@ -514,7 +514,7 @@ module Confinement
     end
   end
 
-  class HesitantCompiler
+  class Compiler
     def initialize(site)
       @site = site
       @lock = Mutex.new
@@ -540,54 +540,50 @@ module Confinement
     def compile_assets(asset_files)
       asset_paths = asset_files.values
 
-      if assets_dirty?
-        out, status = Open3.capture2(
-          "yarn",
-          "run",
-          "parcel",
-          "build",
-          "--no-cache",
-          "--dist-dir", site.assets_root.to_s,
-          "--public-url", site.assets_root.basename.to_s,
-          *asset_paths.select(&:entrypoint?).map(&:input_path).map(&:to_s)
-        )
+      out, status = Open3.capture2(
+        "yarn",
+        "run",
+        "parcel",
+        "build",
+        "--no-cache",
+        "--dist-dir", site.assets_root.to_s,
+        "--public-url", site.assets_root.basename.to_s,
+        *asset_paths.select(&:entrypoint?).map(&:input_path).map(&:to_s)
+      )
 
-        if !status.success?
-          raise "Asset compilation failed"
-        end
+      if !status.success?
+        raise "Asset compilation failed"
+      end
 
-        matches = PARCEL_FILES_OUTPUT_REGEX.match(out)[1]
+      matches = PARCEL_FILES_OUTPUT_REGEX.match(out)[1]
 
-        if !matches
-          raise "Asset compilation output parsing failed"
-        end
+      if !matches
+        raise "Asset compilation output parsing failed"
+      end
 
-        processed_file_paths = matches.split("\n\n")
+      processed_file_paths = matches.split("\n\n")
 
-        processed_file_paths.map do |file|
-          output_file, *input_files = file.strip.split(/\n(?:└|├)── /)
+      processed_file_paths.map do |file|
+        output_file, *input_files = file.strip.split(/\n(?:└|├)── /)
 
-          output_path = site.root.concat(output_file[PARCEL_FILE_OUTPUT_REGEX, 1])
+        output_path = site.root.concat(output_file[PARCEL_FILE_OUTPUT_REGEX, 1])
 
-          input_files.each do |input_file|
-            input_path = site.root.concat(input_file[PARCEL_FILE_OUTPUT_REGEX, 1])
+        input_files.each do |input_file|
+          input_path = site.root.concat(input_file[PARCEL_FILE_OUTPUT_REGEX, 1])
 
-            if !asset_files.key?(input_path)
-              next
-            end
-
-            url_path = output_path.relative_path_from(site.output_root)
-            asset_files[input_path].url_path = url_path.to_s
-            asset_files[input_path].output_path = output_path
-            asset_files[input_path].body = output_path.read
+          if !asset_files.key?(input_path)
+            next
           end
+
+          url_path = output_path.relative_path_from(site.output_root)
+          asset_files[input_path].url_path = url_path.to_s
+          asset_files[input_path].output_path = output_path
+          asset_files[input_path].body = output_path.read
         end
       end
     end
 
     def compile_contents(contents)
-      return if !contents_dirty?
-
       contents.each do |content|
         compile_content(content)
       end
@@ -634,22 +630,12 @@ module Confinement
 
       nil
     end
-
-    private
-
-    def contents_dirty?
-      true
-    end
-
-    def assets_dirty?
-      true
-    end
   end
 
   class Publish
     def initialize(site)
       @site = site
-      @compiler = HesitantCompiler.new(@site)
+      @compiler = Compiler.new(@site)
     end
 
     def write
