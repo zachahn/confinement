@@ -6,14 +6,10 @@ $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 require "pry"
 require "confinement"
 
-Confinement.root = __dir__
-
 Confinement.site = Confinement::Site.new(
-  root: Confinement.root,
+  root: __dir__,
   assets: "assets",
   contents: "contents",
   layouts: "layouts",
-  config: {
-    index: "index.html",
-  }
+  output_root: "public"
 )

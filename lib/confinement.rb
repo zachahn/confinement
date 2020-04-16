@@ -77,20 +77,7 @@ module Confinement
   using Easier
 
   class << self
-    attr_reader :root
     attr_accessor :site
-
-    def root=(path)
-      # NOTE: Pathname.new(Pathname.new(".")) == Pathname.new(".")
-      path = Pathname.new(path).expand_path
-      path = path.expand_path
-
-      if !path.exist?
-        raise Error::PathDoesNotExist, "Root path does not exist: #{path}"
-      end
-
-      @root = path
-    end
   end
 
   class Site
@@ -101,22 +88,26 @@ module Confinement
       layouts:,
       view_context_helpers: [],
       guesses: Renderer.guesses,
-      config: {}
+      output_root:,
+      output_assets: "assets",
+      output_directory_index: "index.html"
     )
-      @root = root
-      @assets = assets
-      @contents = contents
-      @layouts = layouts
+      @root = Pathname.new(root).expand_path
+
+      if !@root.exist?
+        raise Error::PathDoesNotExist, "Root path does not exist: #{@root}"
+      end
+
+      assets_path = @root.concat(assets).cleanpath
+      contents_path = @root.concat(contents).cleanpath
+      layouts_path = @root.concat(layouts).cleanpath
 
       @view_context_helpers = view_context_helpers
       @guessing_registry = guesses
 
-      @config = {
-        index: config.fetch(:index, "index.html")
-      }
-
-      @output_root = root.concat(config.fetch(:destination_root, "public"))
-      @assets_root = @output_root.concat(config.fetch(:assets_subdirectory, "assets"))
+      @output_root_path = @root.concat(output_root)
+      @output_assets_path = @root.concat(output_root, output_assets)
+      @output_directory_index = output_directory_index
 
       @route_identifiers = RouteIdentifiers.new
       @asset_blobs = Blobs.new(scoped_root: assets_path, file_abstraction_class: Asset)
@@ -125,9 +116,9 @@ module Confinement
     end
 
     attr_reader :root
-    attr_reader :output_root
-    attr_reader :assets_root
-    attr_reader :config
+    attr_reader :output_root_path
+    attr_reader :output_assets_path
+    attr_reader :output_directory_index
 
     attr_reader :route_identifiers
     attr_reader :asset_blobs
@@ -169,18 +160,6 @@ module Confinement
           end
         end
       end
-    end
-
-    def contents_path
-      @contents_path ||= @root.concat(@contents).cleanpath
-    end
-
-    def layouts_path
-      @layouts_path ||= @root.concat(@layouts).cleanpath
-    end
-
-    def assets_path
-      @assets_path ||= @root.concat(@assets).cleanpath
     end
   end
 
@@ -546,8 +525,8 @@ module Confinement
         "parcel",
         "build",
         "--no-cache",
-        "--dist-dir", site.assets_root.to_s,
-        "--public-url", site.assets_root.basename.to_s,
+        "--dist-dir", site.output_assets_path.to_s,
+        "--public-url", site.output_assets_path.basename.to_s,
         *asset_paths.select(&:entrypoint?).map(&:input_path).map(&:to_s)
       )
 
@@ -575,7 +554,7 @@ module Confinement
             next
           end
 
-          url_path = output_path.relative_path_from(site.output_root)
+          url_path = output_path.relative_path_from(site.output_root_path)
           asset_files[input_path].url_path = url_path.to_s
           asset_files[input_path].output_path = output_path
           asset_files[input_path].body = output_path.read
@@ -607,9 +586,9 @@ module Confinement
 
       content.output_path =
         if content.url_path[-1] == "/"
-          site.output_root.concat(content.url_path, site.config.fetch(:index))
+          site.output_root_path.concat(content.url_path, site.output_directory_index)
         else
-          site.output_root.concat(content.url_path)
+          site.output_root_path.concat(content.url_path)
         end
 
       if content.output_path.exist?
@@ -618,7 +597,7 @@ module Confinement
         end
       end
 
-      if !site.output_root.include?(content.output_path)
+      if !site.output_root_path.include?(content.output_path)
         return
       end
 
@@ -639,7 +618,7 @@ module Confinement
     end
 
     def write
-      find_or_raise_or_mkdir(@site.output_root)
+      find_or_raise_or_mkdir(@site.output_root_path)
 
       @compiler.compile_everything
     end
