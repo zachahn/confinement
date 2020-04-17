@@ -29,4 +29,5 @@ Gem::Specification.new do |spec|
   spec.add_development_dependency "pry"
 
   spec.add_runtime_dependency("erubi")
+  spec.add_runtime_dependency("zeitwerk", "~> 2.3")
 end

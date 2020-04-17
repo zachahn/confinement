@@ -13,6 +13,7 @@ require "yaml"
 # gems
 require "erubi"
 require "erubi/capture_end"
+require "zeitwerk"
 
 # internal
 require_relative "confinement/version"
@@ -76,6 +77,19 @@ module Confinement
 
   class << self
     attr_accessor :site
+
+    def autoload
+      raise "Autoload is already set up!" if @loader
+
+      @loader = Zeitwerk::Loader.new
+      yield @loader if block_given?
+      @loader.setup
+      @loader
+    end
+
+    def loader
+      @loader
+    end
   end
 
   class Site

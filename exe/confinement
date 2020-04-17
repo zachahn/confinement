@@ -178,6 +178,11 @@ __END__
 ==> config/boot.rb
 require "confinement"
 
+Confinement.autoload do |loader|
+  loader.push_dir("lib")
+  loader.enable_reloading
+end
+
 ==> config/site.rb
 require_relative "boot"
 
