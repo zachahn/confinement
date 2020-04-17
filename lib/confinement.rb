@@ -79,16 +79,52 @@ module Confinement
   end
 
   class Site
+    class Builder
+      def initialize
+        @view_context_helpers = []
+        @guesses = Renderer.guesses
+      end
+
+      attr_accessor :root
+      attr_accessor :assets
+      attr_accessor :contents
+      attr_accessor :layouts
+      attr_accessor :view_context_helpers
+      attr_accessor :guesses
+      attr_accessor :output_root
+      attr_accessor :output_assets
+      attr_accessor :output_directory_index
+    end
+
+    def self.build
+      builder = Builder.new
+      yield(builder)
+
+      arguments = {
+        root: builder.root,
+        assets: builder.assets,
+        contents: builder.contents,
+        layouts: builder.layouts,
+        view_context_helpers: builder.view_context_helpers || [],
+        guesses: builder.guesses || Renderer.guesses,
+        output_root: builder.output_root,
+        output_assets: builder.output_assets || "assets",
+        output_directory_index: builder.output_directory_index || "index.html",
+      }
+
+      new(**arguments.compact)
+    end
+
     def initialize(
       root:,
       assets:,
       contents:,
       layouts:,
-      view_context_helpers: [],
-      guesses: Renderer.guesses,
+      view_context_helpers:,
+      guesses:,
       output_root:,
-      output_assets: "assets",
-      output_directory_index: "index.html"
+      output_assets:,
+      output_directory_index:
     )
       @root = Pathname.new(root).expand_path
 
