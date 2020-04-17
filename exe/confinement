@@ -34,6 +34,12 @@ module Confinement
 
         opts.on("-h", "--help", "Prints this help message") do
         end
+
+        opts.separator("")
+        opts.separator("Subcommands")
+        self.class.subcommands.each do |name, _|
+          opts.separator("    #{name}")
+        end
       end
     end
 
