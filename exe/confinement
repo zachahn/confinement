@@ -175,11 +175,14 @@ end
 Confinement::CLI.new.call(ARGV.dup)
 
 __END__
-==> boot.rb
+==> config/boot.rb
 require "confinement"
 
+==> config/site.rb
+require_relative "boot"
+
 Confinement.site = Confinement::Site.build do |site|
-  site.root = __dir__
+  site.root = File.dirname(__dir__)
   site.assets = "assets"
   site.contents = "contents"
   site.layouts = "layouts"
@@ -187,7 +190,7 @@ Confinement.site = Confinement::Site.build do |site|
 end
 
 ==> build.rb
-require_relative "boot"
+require_relative "config/site"
 
 Confinement.site.build do |assets:, layouts:, contents:, routes:|
   assets.init("application.js", entrypoint: true)

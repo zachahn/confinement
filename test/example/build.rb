@@ -1,4 +1,4 @@
-require_relative "boot"
+require_relative "config/site"
 
 using Confinement::Easier
 
