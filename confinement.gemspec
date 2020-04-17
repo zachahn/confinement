@@ -30,4 +30,6 @@ Gem::Specification.new do |spec|
 
   spec.add_runtime_dependency("erubi")
   spec.add_runtime_dependency("zeitwerk", "~> 2.3")
+  spec.add_runtime_dependency("rack", "~> 2.2")
+  spec.add_runtime_dependency("puma", "~> 4.3")
 end
