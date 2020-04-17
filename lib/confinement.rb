@@ -1,8 +1,6 @@
 # frozen_string_literal: true
 
-if Gem.loaded_specs.has_key?("pry-byebug")
-  require "pry-byebug"
-elsif Gem.loaded_specs.has_key?("pry-byebug")
+if Gem.loaded_specs.has_key?("pry")
   require "pry"
 end
 
