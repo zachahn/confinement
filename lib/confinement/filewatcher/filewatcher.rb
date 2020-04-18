@@ -25,16 +25,9 @@ class Filewatcher
     @immediate = options[:immediate]
     @show_spinner = options[:spinner]
     @interval = options.fetch(:interval, 0.5)
-    @every = options[:every]
   end
 
   def watch(&on_update)
-    ## The set of available signals depends on the OS
-    ## Windows doesn't support `HUP` signal, for example
-    (%w[HUP INT TERM] & Signal.list.keys).each do |signal|
-      trap(signal) { exit }
-    end
-
     @on_update = on_update
     @keep_watching = true
     yield('', '') if @immediate
@@ -43,6 +36,8 @@ class Filewatcher
 
     @end_snapshot = mtime_snapshot
     finalize(&on_update)
+  ensure
+    stop
   end
 
   def pause

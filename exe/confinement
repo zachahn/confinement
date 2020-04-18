@@ -74,11 +74,15 @@ module Confinement
       def optparser
         @options ||= {
           "--site" => "config/site.rb",
+          "--rules" => "build.rb",
         }
         @optparser ||= OptionParser.new do |opts|
           opts.banner = "Usage: #{CLI.script_name} server [options]"
           opts.on("--site=PATH", "Path to config file (default: #{@options["--site"]})") do |path|
             @options["--site"] = path
+          end
+          opts.on("--rules=PATH", "Path to rules file (default: #{@options["--rules"]})") do |path|
+            @options["--rules"] = path
           end
         end
       end
@@ -96,22 +100,65 @@ module Confinement
           raise "Cannot find site config file at: #{site_path}"
         end
 
+        require "confinement/filewatcher/filewatcher"
         load site_path
 
         require "rack"
         require "puma"
         require "puma/configuration"
 
+        dirty = Dirty.new
+
         puma_config = Puma::Configuration.new do |user_config, file_config, default_config|
-          user_config.app Rack::CommonLogger.new(App.new(Confinement.site))
+          user_config.app(Rack::CommonLogger.new(App.new(Confinement.site, dirty)))
         end
 
+        assets_filewatcher = Filewatcher.new(Confinement.watcher_paths.assets)
+        contents_filewatcher = Filewatcher.new(Confinement.watcher_paths.contents)
         puma_launcher = Puma::Launcher.new(puma_config, events: Puma::Events.stdio)
+
+        assets_thread = Thread.new do
+          assets_filewatcher.watch { dirty.dirty_assets! }
+        end
+
+        contents_thread = Thread.new do
+          contents_filewatcher.watch { dirty.dirty_contents! }
+        end
+
         puma_launcher.run
       end
 
+      class Dirty
+        def initialize
+          @dirty_assets = true
+          @dirty_contents = true
+          @mutex = Mutex.new
+        end
+
+        def dirty_assets!
+          @mutex.synchronize { @dirty_assets = true }
+        end
+
+        def dirty_contents!
+          @mutex.synchronize { @dirty_contents = true }
+        end
+
+        def clean!
+          @mutex.synchronize do
+            if @dirty_assets || @dirty_contents
+              yield(@dirty_assets, @dirty_contents)
+            end
+
+            @dirty_assets = false
+            @dirty_contents = false
+          end
+        end
+      end
+
       class App
-        def initialize(site)
+        def initialize(site, dirty)
+          @dirty = dirty
+          @site = site
           @output_root_path = site.output_root_path
           @output_directory_index = site.output_directory_index
         end
@@ -119,6 +166,9 @@ module Confinement
         def call(env)
           if !["GET", "HEAD"].include?(env["REQUEST_METHOD"])
             return [405, { "Content-Type" => "text/plain" }, ["Unsupported method: ", env["REQUEST_METHOD"]]]
+          end
+
+          @dirty.clean! do |is_dirty_assets, is_dirty_contents|
           end
 
           file_path = @output_root_path.concat(env["SCRIPT_NAME"] + env["PATH_INFO"])

@@ -90,6 +90,22 @@ module Confinement
     def loader
       @loader
     end
+
+    def watcher_paths
+      @watcher ||= WatcherPaths.new
+      yield @watcher if block_given?
+      @watcher
+    end
+  end
+
+  class WatcherPaths
+    def initialize
+      @assets = []
+      @contents = []
+    end
+
+    attr_reader :assets
+    attr_reader :contents
   end
 
   class Site
