@@ -1,8 +1,11 @@
-require_relative "config/site"
+require_relative "config/setup"
 
-using Confinement::Easier
+Confinement.site = Confinement::Site.new(Confinement.config) do |site|
+  site.view_context_helpers = []
+  site.guesses = Confinement::Renderer.guesses
+end
 
-Confinement.site.build do |assets:, layouts:, contents:, routes:|
+Confinement.site.rules do |assets:, layouts:, contents:, routes:|
   #    _               _
   #   /_\   ______ ___| |_ ___
   #  / _ \ (_-<_-</ -_)  _(_-<

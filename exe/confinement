@@ -308,24 +308,38 @@ __END__
 ==> config/boot.rb
 require "confinement"
 
-Confinement.autoload do |loader|
+==> config/setup.rb
+require_relative "boot"
+
+Confinement.config = Confinement::Config.new(root: File.dirname(__dir__))
+
+Confinement.config.compiler do |compiler|
+  compiler.output_root = "public"
+  compiler.output_assets = "assets"
+  compiler.output_directory_index = "index.html"
+end
+
+Confinement.config.source do |source|
+  source.assets = "assets"
+  source.contents = "contents"
+  source.layouts = "layouts"
+end
+
+Confinement.loader do |loader|
   loader.push_dir("lib")
   loader.enable_reloading
 end
 
-==> config/site.rb
-require_relative "boot"
-
-Confinement.site = Confinement::Site.build do |site|
-  site.root = File.dirname(__dir__)
-  site.assets = "assets"
-  site.contents = "contents"
-  site.layouts = "layouts"
-  site.output_root = "public"
+Confinement.watcher_paths do |paths|
+  paths.assets.push(Confinement.config.root.join("assets/**/*"))
+  paths.assets.push(Confinement.config.root.join("package.json"))
+  paths.assets.push(Confinement.config.root.join("yarn.lock"))
+  paths.contents.push(Confinement.config.root.join("contents"))
+  paths.contents.push(Confinement.config.root.join("build.rb"))
 end
 
 ==> build.rb
-require_relative "config/site"
+require_relative "config/setup"
 
 Confinement.site.build do |assets:, layouts:, contents:, routes:|
   assets.init("application.js", entrypoint: true)

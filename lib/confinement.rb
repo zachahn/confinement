@@ -75,27 +75,42 @@ module Confinement
 
   using Easier
 
+  module BuilderGetterInitialization
+    def builder_getter(method_name, klass, ivar, new: [], post: "", pass_block:)
+      method_block_arg = pass_block ? "&block" : ""
+      init_parameters = [*new, pass_block ? "&block" : nil].compact.join(", ")
+
+      class_eval(<<~RUBY, __FILE__, __LINE__)
+        def #{method_name}(#{method_block_arg})
+          if #{ivar}
+            if block_given?
+              raise "#{method_name} is already set up"
+            end
+
+            return #{ivar}
+          end
+
+          if !block_given?
+            raise "Can't initialize #{method_name} without block"
+          end
+
+          #{ivar} = #{klass}.new(#{init_parameters})
+          #{pass_block ? "" : "yield(#{ivar})"}
+          #{post}
+          #{ivar}
+        end
+      RUBY
+    end
+  end
+
   class << self
+    extend BuilderGetterInitialization
+
+    builder_getter("loader", "Zeitwerk::Loader", "@loader", post: "@loader.setup", pass_block: false)
+    builder_getter("watcher_paths", "WatcherPaths", "@watcher", pass_block: false)
+
+    attr_accessor :config
     attr_accessor :site
-
-    def autoload
-      raise "Autoload is already set up!" if @loader
-
-      @loader = Zeitwerk::Loader.new
-      yield @loader if block_given?
-      @loader.setup
-      @loader
-    end
-
-    def loader
-      @loader
-    end
-
-    def watcher_paths
-      @watcher ||= WatcherPaths.new
-      yield @watcher if block_given?
-      @watcher
-    end
   end
 
   class WatcherPaths
@@ -108,75 +123,82 @@ module Confinement
     attr_reader :contents
   end
 
-  class Site
-    class Builder
-      def initialize
-        @view_context_helpers = []
-        @guesses = Renderer.guesses
-      end
+  class Config
+    extend BuilderGetterInitialization
 
-      attr_accessor :root
-      attr_accessor :assets
-      attr_accessor :contents
-      attr_accessor :layouts
-      attr_accessor :view_context_helpers
-      attr_accessor :guesses
-      attr_accessor :output_root
-      attr_accessor :output_assets
-      attr_accessor :output_directory_index
-    end
+    builder_getter("compiler", "Config::Compiler", "@compiler", new: ["root: @root"], pass_block: true)
+    builder_getter("source", "Config::Source", "@source", new: ["root: @root"], pass_block: true)
 
-    def self.build
-      builder = Builder.new
-      yield(builder)
-
-      arguments = {
-        root: builder.root,
-        assets: builder.assets,
-        contents: builder.contents,
-        layouts: builder.layouts,
-        view_context_helpers: builder.view_context_helpers || [],
-        guesses: builder.guesses || Renderer.guesses,
-        output_root: builder.output_root,
-        output_assets: builder.output_assets || "assets",
-        output_directory_index: builder.output_directory_index || "index.html",
-      }
-
-      new(**arguments.compact)
-    end
-
-    def initialize(
-      root:,
-      assets:,
-      contents:,
-      layouts:,
-      view_context_helpers:,
-      guesses:,
-      output_root:,
-      output_assets:,
-      output_directory_index:
-    )
-      @root = Pathname.new(root).expand_path
+    def initialize(root:)
+      @root = Pathname.new(root).expand_path.cleanpath
 
       if !@root.exist?
         raise Error::PathDoesNotExist, "Root path does not exist: #{@root}"
       end
+    end
 
-      assets_path = @root.concat(assets).cleanpath
-      contents_path = @root.concat(contents).cleanpath
-      layouts_path = @root.concat(layouts).cleanpath
+    attr_reader :root
 
-      @view_context_helpers = view_context_helpers
-      @guessing_registry = guesses
+    class Compiler
+      def initialize(root:)
+        @root = root
+        yield(self)
+      end
 
-      @output_root_path = @root.concat(output_root)
-      @output_assets_path = @root.concat(output_root, output_assets)
-      @output_directory_index = output_directory_index
+      attr_accessor :output_root
+      attr_accessor :output_assets
+      attr_accessor :output_directory_index
+
+      def output_root_path
+        @root.concat(output_root).cleanpath.expand_path
+      end
+
+      def output_assets_path
+        @root.concat(output_root, output_assets).cleanpath.expand_path
+      end
+    end
+
+    class Source
+      def initialize(root:)
+        @root = root
+        yield(self)
+      end
+
+      attr_accessor :assets
+      attr_accessor :contents
+      attr_accessor :layouts
+
+      def assets_path
+        @root.concat(assets).cleanpath.expand_path
+      end
+
+      def contents_path
+        @root.concat(contents).cleanpath.expand_path
+      end
+
+      def layouts_path
+        @root.concat(layouts).cleanpath.expand_path
+      end
+    end
+  end
+
+  class Site
+    def initialize(config)
+      @root = config.root
+
+      yield(self)
+
+      @view_context_helpers ||= []
+      @guesses ||= Rendering.guesses
+
+      @output_root_path = config.compiler.output_root_path # TODO: remove
+      @output_assets_path = config.compiler.output_assets_path # TODO: remove
+      @output_directory_index = config.compiler.output_directory_index # TODO: remove
 
       @route_identifiers = RouteIdentifiers.new
-      @asset_blobs = Blobs.new(scoped_root: assets_path, file_abstraction_class: Asset)
-      @content_blobs = Blobs.new(scoped_root: contents_path, file_abstraction_class: Content)
-      @layout_blobs = Blobs.new(scoped_root: layouts_path, file_abstraction_class: Layout)
+      @asset_blobs = Blobs.new(scoped_root: config.source.assets_path, file_abstraction_class: Asset)
+      @content_blobs = Blobs.new(scoped_root: config.source.contents_path, file_abstraction_class: Content)
+      @layout_blobs = Blobs.new(scoped_root: config.source.layouts_path, file_abstraction_class: Layout)
     end
 
     attr_reader :root
@@ -189,10 +211,10 @@ module Confinement
     attr_reader :content_blobs
     attr_reader :layout_blobs
 
-    attr_reader :view_context_helpers
-    attr_reader :guessing_registry
+    attr_accessor :view_context_helpers
+    attr_accessor :guesses
 
-    def build
+    def rules
       yield(
         assets: @asset_blobs,
         layouts: @layout_blobs,
@@ -200,7 +222,7 @@ module Confinement
         routes: @route_identifiers
       )
 
-      guesser = Rendering::Guesser.new(guessing_registry)
+      guesser = Rendering::Guesser.new(guesses)
       guess_renderers(guesser, @layout_blobs)
       guess_renderers(guesser, @content_blobs)
 
