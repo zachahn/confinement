@@ -73,13 +73,13 @@ module Confinement
 
       def optparser
         @options ||= {
-          "--site" => "config/site.rb",
+          "--setup" => "config/setup.rb",
           "--rules" => "build.rb",
         }
         @optparser ||= OptionParser.new do |opts|
           opts.banner = "Usage: #{CLI.script_name} server [options]"
-          opts.on("--site=PATH", "Path to config file (default: #{@options["--site"]})") do |path|
-            @options["--site"] = path
+          opts.on("--setup=PATH", "Path to setup file (default: #{@options["--setup"]})") do |path|
+            @options["--setup"] = path
           end
           opts.on("--rules=PATH", "Path to rules file (default: #{@options["--rules"]})") do |path|
             @options["--rules"] = path
@@ -93,15 +93,15 @@ module Confinement
           exit
         end
 
-        site_path = @options.fetch("--site")
-        site_path = Pathname.new(site_path).expand_path
+        setup_path = @options.fetch("--setup")
+        setup_path = Pathname.new(setup_path).expand_path
 
-        if !site_path.exist?
-          raise "Cannot find site config file at: #{site_path}"
+        if !setup_path.exist?
+          raise "Cannot find setup file at: #{setup_path}"
         end
 
         require "confinement/filewatcher/filewatcher"
-        load site_path
+        load setup_path
 
         require "rack"
         require "puma"
