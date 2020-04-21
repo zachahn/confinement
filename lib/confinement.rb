@@ -580,29 +580,17 @@ module Confinement
   end
 
   class Compiler
-    def initialize(site)
-      @site = site
-      @lock = Mutex.new
+    def compile_everything(site)
+      # Assets first since it's almost always a dependency of contents
+      compile_assets(site)
+      compile_contents(site)
     end
-
-    attr_reader :site
-
-    def compile_everything
-      # All compilation happens inside the same lock. So we shouldn't have
-      # to worry about deadlocks or anything
-      @lock.synchronize do
-        # Assets first since it's almost always a dependency of contents
-        compile_assets(site.asset_blobs.send(:lookup))
-        compile_contents(site.route_identifiers.send(:lookup).values)
-      end
-    end
-
-    private
 
     PARCEL_FILES_OUTPUT_REGEX = /^✨[^\n]+\n\n(.*)Done in(?:.*)\z/m
     PARCEL_FILE_OUTPUT_REGEX = /^(?<page>.*?)\s+(?<size>[0-9\.]+\s*[A-Z]?B)\s+(?<time>[0-9\.]+[a-z]?s)$/
 
-    def compile_assets(asset_files)
+    def compile_assets(site)
+      asset_files = site.asset_blobs.send(:lookup)
       asset_paths = asset_files.values
 
       out, status = Open3.capture2(
@@ -648,13 +636,16 @@ module Confinement
       end
     end
 
-    def compile_contents(contents)
+    def compile_contents(site)
+      contents = site.route_identifiers.send(:lookup).values
       contents.each do |content|
-        compile_content(content)
+        compile_content(site, content)
       end
     end
 
-    def compile_content(content)
+    private
+
+    def compile_content(site, content)
       view_context = Rendering::ViewContext.new(
         routes: site.route_identifiers,
         layouts: site.layout_blobs,
@@ -700,13 +691,13 @@ module Confinement
   class Publish
     def initialize(site)
       @site = site
-      @compiler = Compiler.new(@site)
+      @compiler = Compiler.new
     end
 
     def write
       find_or_raise_or_mkdir(@site.output_root_path)
 
-      @compiler.compile_everything
+      @compiler.compile_everything(@site)
     end
 
     private

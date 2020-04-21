@@ -110,7 +110,7 @@ module Confinement
         dirty = Dirty.new
 
         puma_config = Puma::Configuration.new do |user_config, file_config, default_config|
-          user_config.app(Rack::CommonLogger.new(App.new(Confinement.site, dirty)))
+          user_config.app(Rack::CommonLogger.new(App.new(Confinement.config, "build.rb", dirty)))
         end
 
         assets_filewatcher = Filewatcher.new(Confinement.watcher_paths.assets)
@@ -156,11 +156,14 @@ module Confinement
       end
 
       class App
-        def initialize(site, dirty)
+        def initialize(config, rules_path, dirty)
+          @config = config
+          @rules_path = config.root.concat(rules_path).cleanpath
           @dirty = dirty
-          @site = site
-          @output_root_path = site.output_root_path
-          @output_directory_index = site.output_directory_index
+          @output_root_path = config.compiler.output_root_path
+          @output_directory_index = config.compiler.output_directory_index
+          @compiler = Compiler.new
+          @first = true
         end
 
         def call(env)
@@ -169,6 +172,15 @@ module Confinement
           end
 
           @dirty.clean! do |is_dirty_assets, is_dirty_contents|
+            puts "Recompiling #{is_dirty_assets ? "everything" : "contents"}..."
+
+            Confinement.loader.reload if !@first
+            @first = false
+
+            load @rules_path
+            @compiler.compile_everything(Confinement.site)
+
+            puts "Done recompiling!"
           end
 
           file_path = @output_root_path.concat(env["SCRIPT_NAME"] + env["PATH_INFO"])
