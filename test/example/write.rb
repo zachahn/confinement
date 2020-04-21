@@ -1,3 +1,3 @@
 require_relative "build"
 
-Confinement::Publish.new(Confinement.site).write
+Confinement::Compiler.new.compile_everything(Confinement.site)

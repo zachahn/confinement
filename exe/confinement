@@ -372,11 +372,6 @@ Confinement.site.build do |assets:, layouts:, contents:, routes:|
   end
 end
 
-==> write.rb
-require_relative "build"
-
-Confinement::Publish.new(Confinement.site).write
-
 ==> package.json
 {
   "name": "website",

@@ -633,6 +633,7 @@ module Confinement
     PARCEL_FILE_OUTPUT_REGEX = /^(?<page>.*?)\s+(?<size>[0-9\.]+\s*[A-Z]?B)\s+(?<time>[0-9\.]+[a-z]?s)$/
 
     def compile_assets(site)
+      create_destination_directory(site)
       asset_files = site.asset_blobs.send(:lookup)
       asset_paths = asset_files.values
 
@@ -680,6 +681,7 @@ module Confinement
     end
 
     def compile_contents(site)
+      create_destination_directory(site)
       contents = site.route_identifiers.send(:lookup).values
       contents.each do |content|
         compile_content(site, content)
@@ -687,6 +689,20 @@ module Confinement
     end
 
     private
+
+    def create_destination_directory(site)
+      destination = site.output_root_path
+
+      if destination.exist?
+        return
+      end
+
+      if !destination.dirname.exist?
+        raise Error::PathDoesNotExist, "Destination's parent path does not exist: #{destination.dirname}"
+      end
+
+      destination.mkpath
+    end
 
     def compile_content(site, content)
       view_context = Rendering::ViewContext.new(
@@ -728,31 +744,6 @@ module Confinement
       content.output_path.write(rendered_body)
 
       nil
-    end
-  end
-
-  class Publish
-    def initialize(site)
-      @site = site
-      @compiler = Compiler.new
-    end
-
-    def write
-      find_or_raise_or_mkdir(@site.output_root_path)
-
-      @compiler.compile_everything(@site)
-    end
-
-    private
-
-    def find_or_raise_or_mkdir(destination)
-      if !destination.exist?
-        if !destination.dirname.exist?
-          raise Error::PathDoesNotExist, "Destination's parent path does not exist: #{destination.dirname}"
-        end
-
-        destination.mkpath
-      end
     end
   end
 end
