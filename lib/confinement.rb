@@ -106,9 +106,6 @@ module Confinement
   class << self
     extend BuilderGetterInitialization
 
-    builder_getter("loader", "Zeitwerk::Loader", "@loader", post: "@loader.setup", pass_block: false)
-    builder_getter("watcher_paths", "WatcherPaths", "@watcher", pass_block: false)
-
     attr_accessor :config
     attr_accessor :site
     attr_writer :env
@@ -118,19 +115,11 @@ module Confinement
     end
   end
 
-  class WatcherPaths
-    def initialize
-      @assets = []
-      @contents = []
-    end
-
-    attr_reader :assets
-    attr_reader :contents
-  end
-
   class Config
     extend BuilderGetterInitialization
 
+    builder_getter("loader", "ZeitwerkProxy", "@loader", pass_block: true)
+    builder_getter("watcher", "WatcherPaths", "@watcher", new: ["root: @root"], pass_block: true)
     builder_getter("compiler", "Config::Compiler", "@compiler", new: ["root: @root"], pass_block: true)
     builder_getter("source", "Config::Source", "@source", new: ["root: @root"], pass_block: true)
 
@@ -143,6 +132,42 @@ module Confinement
     end
 
     attr_reader :root
+
+    class ZeitwerkProxy
+      def initialize
+        @loader = Zeitwerk::Loader.new
+        yield(self)
+        @loader.setup
+      end
+
+      def push_dir(dir)
+        @loader.push_dir(dir)
+      end
+
+      def enable_reloading
+        @loader.enable_reloading
+      end
+
+      def reload
+        @loader.reload
+      end
+    end
+
+    class WatcherPaths
+      def initialize(root:)
+        @root = root
+        @assets = []
+        @contents = []
+
+        yield(self)
+
+        @assets = @assets.map { |path| @root.concat(path) }
+        @contents = @contents.map { |path| @root.concat(path) }
+      end
+
+      attr_reader :assets
+      attr_reader :contents
+    end
 
     class Compiler
       def initialize(root:)

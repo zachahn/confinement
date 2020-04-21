@@ -113,8 +113,8 @@ module Confinement
           user_config.app(Rack::CommonLogger.new(App.new(Confinement.config, "build.rb", dirty)))
         end
 
-        assets_filewatcher = Filewatcher.new(Confinement.watcher_paths.assets)
-        contents_filewatcher = Filewatcher.new(Confinement.watcher_paths.contents)
+        assets_filewatcher = Filewatcher.new(Confinement.config.watcher.assets)
+        contents_filewatcher = Filewatcher.new(Confinement.config.watcher.contents)
         puma_launcher = Puma::Launcher.new(puma_config, events: Puma::Events.stdio)
 
         assets_thread = Thread.new do
@@ -174,7 +174,7 @@ module Confinement
           @dirty.clean! do |is_dirty_assets, is_dirty_contents|
             puts "Recompiling #{is_dirty_assets ? "everything" : "contents"}..."
 
-            Confinement.loader.reload if !@first
+            Confinement.config.loader.reload if !@first
             @first = false
 
             if is_dirty_assets
@@ -346,22 +346,21 @@ Confinement.config.source do |source|
   source.layouts = "layouts"
 end
 
-Confinement.loader do |loader|
+Confinement.config.loader do |loader|
   loader.push_dir("lib")
   loader.enable_reloading
 end
 
-Confinement.watcher_paths do |paths|
-  paths.assets.push(Confinement.config.root.join("assets/**/*"))
-  paths.assets.push(Confinement.config.root.join("package.json"))
-  paths.assets.push(Confinement.config.root.join("yarn.lock"))
-  paths.contents.push(Confinement.config.root.join("contents"))
-  paths.contents.push(Confinement.config.root.join("build.rb"))
+Confinement.config.watcher do |paths|
+  paths.assets.push("assets/**/*")
+  paths.assets.push("package.json")
+  paths.assets.push("yarn.lock")
+  paths.contents.push("contents")
+  paths.contents.push("lib")
+  paths.contents.push("build.rb")
 end
 
 ==> build.rb
-require_relative "config/setup"
-
 Confinement.site.build do |assets:, layouts:, contents:, routes:|
   assets.init("application.js", entrypoint: true)
   assets.init("application.css", entrypoint: false)
