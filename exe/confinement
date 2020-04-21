@@ -177,8 +177,15 @@ module Confinement
             Confinement.loader.reload if !@first
             @first = false
 
-            load @rules_path
-            @compiler.compile_everything(Confinement.site)
+            if is_dirty_assets
+              load @rules_path
+              @compiler.compile_everything(Confinement.site)
+            elsif is_dirty_contents
+              partial_compilation = Confinement.site.partial_compilation
+              load @rules_path
+              Confinement.site.partial_compilation = partial_compilation
+              @compiler.compile_contents(Confinement.site)
+            end
 
             puts "Done recompiling!"
           end

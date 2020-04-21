@@ -234,6 +234,18 @@ module Confinement
       nil
     end
 
+    def partial_compilation
+      { asset_blobs: @asset_blobs }
+    end
+
+    def partial_compilation=(previous_partial_compilation)
+      return if previous_partial_compilation.nil?
+
+      @asset_blobs = previous_partial_compilation.fetch(:asset_blobs)
+
+      nil
+    end
+
     private
 
     def guess_renderers(guesser, blobs)
