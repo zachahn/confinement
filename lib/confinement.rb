@@ -111,6 +111,11 @@ module Confinement
 
     attr_accessor :config
     attr_accessor :site
+    attr_writer :env
+
+    def env
+      @env ||= ENV.fetch("CONFINEMENT_ENV", "development")
+    end
   end
 
   class WatcherPaths
