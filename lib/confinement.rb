@@ -76,12 +76,11 @@ module Confinement
   using Easier
 
   module BuilderGetterInitialization
-    def builder_getter(method_name, klass, ivar, new: [], post: "", pass_block:)
-      method_block_arg = pass_block ? "&block" : ""
-      init_parameters = [*new, pass_block ? "&block" : nil].compact.join(", ")
+    def builder_getter(method_name, klass, ivar, new: [])
+      init_parameters = [*new, "&block"].join(", ")
 
       class_eval(<<~RUBY, __FILE__, __LINE__)
-        def #{method_name}(#{method_block_arg})
+        def #{method_name}(&block)
           if #{ivar}
             if block_given?
               raise "#{method_name} is already set up"
@@ -95,8 +94,6 @@ module Confinement
           end
 
           #{ivar} = #{klass}.new(#{init_parameters})
-          #{pass_block ? "" : "yield(#{ivar})"}
-          #{post}
           #{ivar}
         end
       RUBY
@@ -118,10 +115,10 @@ module Confinement
   class Config
     extend BuilderGetterInitialization
 
-    builder_getter("loader", "ZeitwerkProxy", "@loader", pass_block: true)
-    builder_getter("watcher", "WatcherPaths", "@watcher", new: ["root: @root"], pass_block: true)
-    builder_getter("compiler", "Config::Compiler", "@compiler", new: ["root: @root"], pass_block: true)
-    builder_getter("source", "Config::Source", "@source", new: ["root: @root"], pass_block: true)
+    builder_getter("loader", "ZeitwerkProxy", "@loader")
+    builder_getter("watcher", "WatcherPaths", "@watcher", new: ["root: @root"])
+    builder_getter("compiler", "Config::Compiler", "@compiler", new: ["root: @root"])
+    builder_getter("source", "Config::Source", "@source", new: ["root: @root"])
 
     def initialize(root:)
       @root = Pathname.new(root).expand_path.cleanpath
