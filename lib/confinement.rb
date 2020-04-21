@@ -161,6 +161,10 @@ module Confinement
       def output_assets_path
         @root.concat(output_root, output_assets).cleanpath.expand_path
       end
+
+      def default_output_root
+        "tmp/build-#{Confinement.env}"
+      end
     end
 
     class Source
