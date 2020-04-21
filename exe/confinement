@@ -162,7 +162,7 @@ module Confinement
           @dirty = dirty
           @output_root_path = config.compiler.output_root_path
           @output_directory_index = config.compiler.output_directory_index
-          @compiler = Compiler.new
+          @compiler = Compiler.new(config)
           @first = true
         end
 

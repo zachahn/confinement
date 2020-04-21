@@ -222,10 +222,6 @@ module Confinement
       @view_context_helpers ||= []
       @guesses ||= Rendering.guesses
 
-      @output_root_path = config.compiler.output_root_path # TODO: remove
-      @output_assets_path = config.compiler.output_assets_path # TODO: remove
-      @output_directory_index = config.compiler.output_directory_index # TODO: remove
-
       @route_identifiers = RouteIdentifiers.new
       @asset_blobs = Blobs.new(scoped_root: config.source.assets_path, file_abstraction_class: Asset)
       @content_blobs = Blobs.new(scoped_root: config.source.contents_path, file_abstraction_class: Content)
@@ -233,9 +229,6 @@ module Confinement
     end
 
     attr_reader :root
-    attr_reader :output_root_path
-    attr_reader :output_assets_path
-    attr_reader :output_directory_index
 
     attr_reader :route_identifiers
     attr_reader :asset_blobs
@@ -623,6 +616,10 @@ module Confinement
   end
 
   class Compiler
+    def initialize(config)
+      @config = config
+    end
+
     def compile_everything(site)
       # Assets first since it's almost always a dependency of contents
       compile_assets(site)
@@ -633,7 +630,7 @@ module Confinement
     PARCEL_FILE_OUTPUT_REGEX = /^(?<page>.*?)\s+(?<size>[0-9\.]+\s*[A-Z]?B)\s+(?<time>[0-9\.]+[a-z]?s)$/
 
     def compile_assets(site)
-      create_destination_directory(site)
+      create_destination_directory
       asset_files = site.asset_blobs.send(:lookup)
       asset_paths = asset_files.values
 
@@ -643,8 +640,8 @@ module Confinement
         "parcel",
         "build",
         "--no-cache",
-        "--dist-dir", site.output_assets_path.to_s,
-        "--public-url", site.output_assets_path.basename.to_s,
+        "--dist-dir", @config.compiler.output_assets_path.to_s,
+        "--public-url", @config.compiler.output_assets_path.basename.to_s,
         *asset_paths.select(&:entrypoint?).map(&:input_path).map(&:to_s)
       )
 
@@ -663,16 +660,16 @@ module Confinement
       processed_file_paths.map do |file|
         output_file, *input_files = file.strip.split(/\n(?:└|├)── /)
 
-        output_path = site.root.concat(output_file[PARCEL_FILE_OUTPUT_REGEX, 1])
+        output_path = @config.root.concat(output_file[PARCEL_FILE_OUTPUT_REGEX, 1])
 
         input_files.each do |input_file|
-          input_path = site.root.concat(input_file[PARCEL_FILE_OUTPUT_REGEX, 1])
+          input_path = @config.root.concat(input_file[PARCEL_FILE_OUTPUT_REGEX, 1])
 
           if !asset_files.key?(input_path)
             next
           end
 
-          url_path = output_path.relative_path_from(site.output_root_path)
+          url_path = output_path.relative_path_from(@config.compiler.output_root_path)
           asset_files[input_path].url_path = url_path.to_s
           asset_files[input_path].output_path = output_path
           asset_files[input_path].body = output_path.read
@@ -681,7 +678,7 @@ module Confinement
     end
 
     def compile_contents(site)
-      create_destination_directory(site)
+      create_destination_directory
       contents = site.route_identifiers.send(:lookup).values
       contents.each do |content|
         compile_content(site, content)
@@ -690,8 +687,8 @@ module Confinement
 
     private
 
-    def create_destination_directory(site)
-      destination = site.output_root_path
+    def create_destination_directory
+      destination = @config.compiler.output_root_path
 
       if destination.exist?
         return
@@ -722,9 +719,9 @@ module Confinement
 
       content.output_path =
         if content.url_path[-1] == "/"
-          site.output_root_path.concat(content.url_path, site.output_directory_index)
+          @config.compiler.output_root_path.concat(content.url_path, @config.compiler.output_directory_index)
         else
-          site.output_root_path.concat(content.url_path)
+          @config.compiler.output_root_path.concat(content.url_path)
         end
 
       if content.output_path.exist?
@@ -733,7 +730,7 @@ module Confinement
         end
       end
 
-      if !site.output_root_path.include?(content.output_path)
+      if !@config.compiler.output_root_path.include?(content.output_path)
         return
       end
 
