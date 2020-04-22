@@ -75,6 +75,7 @@ module Confinement
         @options ||= {
           "--setup" => "config/setup.rb",
           "--rules" => "rules.rb",
+          "--port" => "7000"
         }
         @optparser ||= OptionParser.new do |opts|
           opts.banner = "Usage: #{CLI.script_name} server [options]"
@@ -83,6 +84,9 @@ module Confinement
           end
           opts.on("--rules=PATH", "Path to rules file (default: #{@options["--rules"]})") do |path|
             @options["--rules"] = path
+          end
+          opts.on("--port=PORT", "Port to listen to (default: #{@options["--port"]})") do |port|
+            @options["--port"] = port
           end
         end
       end
@@ -110,6 +114,7 @@ module Confinement
         dirty = Dirty.new
 
         puma_config = Puma::Configuration.new do |user_config, file_config, default_config|
+          user_config.port(@options.fetch("--port").to_i)
           user_config.app(Rack::CommonLogger.new(App.new(Confinement.config, @options.fetch("--rules"), dirty)))
         end
 
