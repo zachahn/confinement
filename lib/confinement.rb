@@ -182,6 +182,8 @@ module Confinement
       def initialize(root:)
         @root = root
         yield(self)
+
+        self.output_root ||= default_output_root
       end
 
       attr_accessor :output_root
