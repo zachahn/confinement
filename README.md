@@ -28,6 +28,8 @@ Or install it yourself as:
 
 ```sh
 confinement init path/to/new/site
+cd path/to/new/site
+confinement server # or confinement build
 ```
 
 
