@@ -132,24 +132,27 @@ module Confinement
         end
 
         setup_path = @options.fetch("--setup")
+        rules_path = @options.fetch("--rules")
+
         setup_path = Pathname.new(setup_path).expand_path
+        rules_path = Pathname.new(rules_path).expand_path
 
         if !setup_path.exist?
           raise "Cannot find setup file at: #{setup_path}"
         end
 
-        require "confinement/filewatcher/filewatcher"
-        load setup_path
-
         require "rack"
         require "puma"
         require "puma/configuration"
+        require "confinement/filewatcher/filewatcher"
+
+        load setup_path
 
         dirty = Dirty.new
 
         puma_config = Puma::Configuration.new do |user_config, file_config, default_config|
           user_config.port(@options.fetch("--port").to_i)
-          user_config.app(Rack::CommonLogger.new(App.new(Confinement.config, @options.fetch("--rules"), dirty)))
+          user_config.app(Rack::CommonLogger.new(App.new(Confinement.config, rules_path, dirty)))
         end
 
         assets_filewatcher = Filewatcher.new(Confinement.config.watcher.assets)
@@ -198,12 +201,12 @@ module Confinement
         def initialize(config, rules_path, dirty)
           @config = config
           @logger = config.logger
-          @rules_path = config.root.concat(rules_path).cleanpath
+          @rules_path = rules_path
           @dirty = dirty
           @output_root_path = config.compiler.output_root_path
           @output_directory_index = config.compiler.output_directory_index
           @compiler = Compiler.new(config)
-          @first = true
+          @reload = false
         end
 
         def call(env)
@@ -214,10 +217,10 @@ module Confinement
           @dirty.clean! do |is_dirty_assets, is_dirty_contents|
             @logger.debug { "dirty: assets=#{is_dirty_assets}, contents=#{is_dirty_contents}" }
 
-            if !@first
+            if @reload
               @logger.debug { "reloading with Zeitwerk" }
               Confinement.config.loader.reload
-              @first = false
+              @reload = true
             end
 
             if is_dirty_assets
