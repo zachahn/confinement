@@ -18,6 +18,7 @@ module Confinement
       @subcommands ||= {
         "init" => Init.new,
         "server" => Server.new,
+        "build" => Build.new,
       }
     end
 
@@ -67,6 +68,39 @@ module Confinement
     end
 
     private
+
+    class Build
+      def optparser
+        @options ||= {
+          "--setup" => "config/setup.rb",
+          "--rules" => "rules.rb",
+        }
+        @optparser ||= OptionParser.new do |opts|
+          opts.banner = "Usage: #{CLI.script_name} build [options]"
+          opts.on("--setup=PATH", "Path to setup file (default: #{@options["--setup"]})") do |path|
+            @options["--setup"] = path
+          end
+          opts.on("--rules=PATH", "Path to rules file (default: #{@options["--rules"]})") do |path|
+            @options["--rules"] = path
+          end
+          opts.on("--help", "Print this help message") do
+            puts self
+            exit
+          end
+        end
+      end
+
+      def call(argv)
+        setup_path = @options.fetch("--setup")
+        rules_path = @options.fetch("--rules")
+
+        load Pathname.new(setup_path).expand_path
+        @compiler = Compiler.new(Confinement.config)
+
+        load Pathname.new(rules_path).expand_path
+        @compiler.compile_everything(Confinement.site)
+      end
+    end
 
     class Server
       using Easier
