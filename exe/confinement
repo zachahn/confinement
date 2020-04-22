@@ -407,11 +407,11 @@ Confinement.config.loader do |loader|
 end
 
 Confinement.config.watcher do |paths|
-  paths.assets.push("assets/**/*")
+  paths.assets.push("assets/")
   paths.assets.push("package.json")
   paths.assets.push("yarn.lock")
-  paths.contents.push("contents")
-  paths.contents.push("lib")
+  paths.contents.push("contents/")
+  paths.contents.push("lib/")
   paths.contents.push("rules.rb")
 end
 
