@@ -74,7 +74,7 @@ module Confinement
       def optparser
         @options ||= {
           "--setup" => "config/setup.rb",
-          "--rules" => "build.rb",
+          "--rules" => "rules.rb",
         }
         @optparser ||= OptionParser.new do |opts|
           opts.banner = "Usage: #{CLI.script_name} server [options]"
@@ -110,7 +110,7 @@ module Confinement
         dirty = Dirty.new
 
         puma_config = Puma::Configuration.new do |user_config, file_config, default_config|
-          user_config.app(Rack::CommonLogger.new(App.new(Confinement.config, "build.rb", dirty)))
+          user_config.app(Rack::CommonLogger.new(App.new(Confinement.config, @options.fetch("--rules"), dirty)))
         end
 
         assets_filewatcher = Filewatcher.new(Confinement.config.watcher.assets)
@@ -363,11 +363,11 @@ Confinement.config.watcher do |paths|
   paths.assets.push("yarn.lock")
   paths.contents.push("contents")
   paths.contents.push("lib")
-  paths.contents.push("build.rb")
+  paths.contents.push("rules.rb")
 end
 
-==> build.rb
-Confinement.site.build do |assets:, layouts:, contents:, routes:|
+==> rules.rb
+Confinement.site.rules do |assets:, layouts:, contents:, routes:|
   assets.init("application.js", entrypoint: true)
   assets.init("application.css", entrypoint: false)
 
