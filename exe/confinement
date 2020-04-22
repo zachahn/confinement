@@ -303,12 +303,14 @@ module Confinement
           [Pathname.new(File.join(root, path.strip)), body.strip + "\n"]
         end
 
+        mkdir(root, root)
+        mkdir(root.join("lib"), root)
+        mkdir(root.join("tmp"), root)
+
         templates
           .map { |path, _| path.dirname }
           .uniq
-          .each { |path| mkdir(path, root) }
-
-        mkdir("tmp", root)
+          .each { |path| mkdir(path, root) if path != root }
 
         templates.each do |path, body|
           write(path, body, root)
@@ -416,6 +418,11 @@ Confinement.config.watcher do |paths|
 end
 
 ==> rules.rb
+Confinement.site = Confinement::Site.new(Confinement.config) do |site|
+  site.view_context_helpers = []
+  site.guesses = Confinement::Renderer.guesses
+end
+
 Confinement.site.rules do |assets:, layouts:, contents:, routes:|
   assets.init("application.js", entrypoint: true)
   assets.init("application.css", entrypoint: false)
