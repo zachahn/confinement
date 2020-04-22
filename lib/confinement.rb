@@ -712,6 +712,20 @@ module Confinement
       @logger.info { "finished compiling contents" }
     end
 
+    def partial_compilation_dirty?(before:, after:)
+      return true if !before.key?(:asset_blobs)
+      return true if !after.key?(:asset_blobs)
+
+      before_assets = before[:asset_blobs].send(:lookup)
+      after_assets = after[:asset_blobs].send(:lookup)
+
+      return true if before_assets.keys.sort != after_assets.keys.sort
+      return true if before_assets.any? { |k, v| v.input_path != after_assets[k].input_path }
+      return true if before_assets.any? { |k, v| v.entrypoint? != after_assets[k].entrypoint? }
+
+      false
+    end
+
     private
 
     def create_destination_directory

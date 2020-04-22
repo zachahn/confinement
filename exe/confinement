@@ -231,8 +231,15 @@ module Confinement
               partial_compilation = Confinement.site.partial_compilation
               @logger.debug { "loading: #{@rules_path}" }
               load @rules_path
-              Confinement.site.partial_compilation = partial_compilation
-              @compiler.compile_contents(Confinement.site)
+              precompilation_partial_compilation = Confinement.site.partial_compilation
+
+              if @compiler.partial_compilation_dirty?(before: partial_compilation, after: precompilation_partial_compilation)
+                @logger.info { "detected asset change" }
+                @compiler.compile_everything(Confinement.site)
+              else
+                Confinement.site.partial_compilation = partial_compilation
+                @compiler.compile_contents(Confinement.site)
+              end
             end
 
             @logger.debug { "dirty: finished!" }
