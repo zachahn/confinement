@@ -6,6 +6,7 @@ end
 
 # standard library
 require "digest"
+require "logger"
 require "open3"
 require "pathname"
 require "yaml"
@@ -129,6 +130,17 @@ module Confinement
     end
 
     attr_reader :root
+    attr_writer :logger
+
+    def logger
+      @logger ||= default_logger
+    end
+
+    def default_logger
+      Logger.new($stdout).tap do |l|
+        l.level = Logger::INFO
+      end
+    end
 
     class ZeitwerkProxy
       def initialize
@@ -618,6 +630,7 @@ module Confinement
   class Compiler
     def initialize(config)
       @config = config
+      @logger = config.logger
     end
 
     def compile_everything(site)
@@ -630,11 +643,12 @@ module Confinement
     PARCEL_FILE_OUTPUT_REGEX = /^(?<page>.*?)\s+(?<size>[0-9\.]+\s*[A-Z]?B)\s+(?<time>[0-9\.]+[a-z]?s)$/
 
     def compile_assets(site)
+      @logger.info { "compiling assets" }
       create_destination_directory
       asset_files = site.asset_blobs.send(:lookup)
       asset_paths = asset_files.values
 
-      out, status = Open3.capture2(
+      command = [
         "yarn",
         "run",
         "parcel",
@@ -643,15 +657,21 @@ module Confinement
         "--dist-dir", @config.compiler.output_assets_path.to_s,
         "--public-url", @config.compiler.output_assets_path.basename.to_s,
         *asset_paths.select(&:entrypoint?).map(&:input_path).map(&:to_s)
-      )
+      ]
+
+      @logger.debug { "running: #{command.join(" ")}" }
+
+      out, status = Open3.capture2(*command)
 
       if !status.success?
+        @logger.fatal { "asset compilation failed" }
         raise "Asset compilation failed"
       end
 
       matches = PARCEL_FILES_OUTPUT_REGEX.match(out)[1]
 
       if !matches
+        @logger.fatal { "asset compilation ouptut parsing failed" }
         raise "Asset compilation output parsing failed"
       end
 
@@ -670,19 +690,24 @@ module Confinement
           end
 
           url_path = output_path.relative_path_from(@config.compiler.output_root_path)
+          @logger.debug { "processesd asset: #{input_path}, #{url_path}, #{output_path}" }
           asset_files[input_path].url_path = url_path.to_s
           asset_files[input_path].output_path = output_path
           asset_files[input_path].body = output_path.read
         end
       end
+
+      @logger.info { "finished compiling assets" }
     end
 
     def compile_contents(site)
+      @logger.info { "compiling contents" }
       create_destination_directory
       contents = site.route_identifiers.send(:lookup).values
       contents.each do |content|
         compile_content(site, content)
       end
+      @logger.info { "finished compiling contents" }
     end
 
     private
@@ -702,6 +727,7 @@ module Confinement
     end
 
     def compile_content(site, content)
+      @logger.debug { "compiling content: #{content.input_path}, #{content.renderers}" }
       view_context = Rendering::ViewContext.new(
         routes: site.route_identifiers,
         layouts: site.layout_blobs,

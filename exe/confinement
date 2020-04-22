@@ -158,6 +158,7 @@ module Confinement
       class App
         def initialize(config, rules_path, dirty)
           @config = config
+          @logger = config.logger
           @rules_path = config.root.concat(rules_path).cleanpath
           @dirty = dirty
           @output_root_path = config.compiler.output_root_path
@@ -172,22 +173,27 @@ module Confinement
           end
 
           @dirty.clean! do |is_dirty_assets, is_dirty_contents|
-            puts "Recompiling #{is_dirty_assets ? "everything" : "contents"}..."
+            @logger.debug { "dirty: assets=#{is_dirty_assets}, contents=#{is_dirty_contents}" }
 
-            Confinement.config.loader.reload if !@first
-            @first = false
+            if !@first
+              @logger.debug { "reloading with Zeitwerk" }
+              Confinement.config.loader.reload
+              @first = false
+            end
 
             if is_dirty_assets
+              @logger.debug { "loading: #{@rules_path}" }
               load @rules_path
               @compiler.compile_everything(Confinement.site)
             elsif is_dirty_contents
               partial_compilation = Confinement.site.partial_compilation
+              @logger.debug { "loading: #{@rules_path}" }
               load @rules_path
               Confinement.site.partial_compilation = partial_compilation
               @compiler.compile_contents(Confinement.site)
             end
 
-            puts "Done recompiling!"
+            @logger.debug { "dirty: finished!" }
           end
 
           file_path = @output_root_path.concat(env["SCRIPT_NAME"] + env["PATH_INFO"])
