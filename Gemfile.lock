@@ -1,7 +1,7 @@
 PATH
   remote: .
   specs:
-    confinement (0.0.2)
+    confinement (0.0.3)
       erubi
       puma (~> 4.3)
       rack (~> 2.2)
