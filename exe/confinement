@@ -220,6 +220,7 @@ module Confinement
             if @reload
               @logger.debug { "reloading with Zeitwerk" }
               Confinement.config.loader.reload
+            else
               @reload = true
             end
 
