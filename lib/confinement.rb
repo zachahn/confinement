@@ -463,6 +463,10 @@ module Confinement
       @frontmatter
     end
 
+    def input
+      frontmatter.merge(locals)
+    end
+
     private
 
     def parse_body_and_frontmatter
@@ -570,6 +574,10 @@ module Confinement
       attr_reader :contents
       attr_reader :locals
       attr_reader :frontmatter
+
+      def input
+        frontmatter.merge(locals)
+      end
 
       def capture
         original_buffer = @_buf
