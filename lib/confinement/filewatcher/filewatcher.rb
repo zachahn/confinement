@@ -96,7 +96,16 @@ class Filewatcher
     filenames -= expand_directories(@unexpanded_excluded_filenames)
 
     filenames.each do |filename|
-      mtime = File.exist?(filename) ? File.mtime(filename) : Time.new(0)
+      mtime =
+        if File.exist?(filename)
+          begin
+            File.mtime(filename)
+          rescue
+            Time.new(0)
+          end
+        else
+          Time.new(0)
+        end
       snapshot[filename] = mtime
     end
     snapshot
