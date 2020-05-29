@@ -181,6 +181,9 @@ module Confinement
     class Compiler
       def initialize(root:)
         @root = root
+        self.parcel_cache = false
+        self.parcel_cache_directory = "tmp/parcel"
+
         yield(self)
 
         self.output_root ||= default_output_root
@@ -189,6 +192,9 @@ module Confinement
       attr_accessor :output_root
       attr_accessor :output_assets
       attr_accessor :output_directory_index
+      attr_accessor :parcel_cache
+      attr_accessor :parcel_cache_directory
+      attr_accessor :parcel_minify
 
       def output_root_path
         @root.concat(output_root).cleanpath.expand_path
@@ -196,6 +202,12 @@ module Confinement
 
       def output_assets_path
         @root.concat(output_root, output_assets).cleanpath.expand_path
+      end
+
+      def parcel_cache_directory_path
+        if parcel_cache_directory
+          @root.concat(parcel_cache_directory).cleanpath.expand_path
+        end
       end
 
       def default_output_root
@@ -663,11 +675,21 @@ module Confinement
         "run",
         "parcel",
         "build",
-        "--no-cache",
-        "--dist-dir", @config.compiler.output_assets_path.to_s,
-        "--public-url", @config.compiler.output_assets_path.basename.to_s,
-        *asset_paths.select(&:entrypoint?).map(&:input_path).map(&:to_s)
       ]
+
+      if !@config.compiler.parcel_minify
+        command.push("--no-minify")
+      end
+
+      if @config.compiler.parcel_cache && @config.compiler.parcel_cache_directory
+        command.push("--cache-dir", @config.compiler.parcel_cache_directory_path.to_s)
+      else
+        command.push("--no-cache")
+      end
+
+      command.push("--dist-dir", @config.compiler.output_assets_path.to_s)
+      command.push("--public-url", @config.compiler.output_assets_path.basename.to_s)
+      command.push(*asset_paths.select(&:entrypoint?).map(&:input_path).map(&:to_s))
 
       @logger.debug { "running: #{command.join(" ")}" }
 
